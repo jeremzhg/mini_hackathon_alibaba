@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Globe, Plus, Trash2, Cloud } from "lucide-react";
+import { Globe, Plus, Trash2, Cloud, Lock, Network } from "lucide-react";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import { Select } from "./ui/Select";
 import { Badge } from "./ui/Badge";
+import { Toggle } from "./ui/Toggle";
 import { PageHeader } from "./ui/PageHeader";
 import { TablePagination } from "./ui/TablePagination";
 
@@ -13,92 +14,104 @@ interface WhitelistDomain {
     status: "Active" | "Verify";
     dateAdded: string;
     icon: React.ReactNode;
+    httpsRequired: boolean;
+    subdomainsIncluded: boolean;
 }
+
+// ── Per-account seed data ───────────────────────────────────────────────
+
+const AI_ACCOUNTS = [
+    { id: "cloud-infrastructure", name: "Cloud Infrastructure (ID: 8821-X)" },
+    { id: "payment-gateway", name: "Payment Gateway (ID: 4192-A)" },
+    { id: "data-processing", name: "Data Processing (ID: 2910-B)" },
+];
+
+const INITIAL_DOMAINS: Record<string, WhitelistDomain[]> = {
+    "cloud-infrastructure": [
+        { id: "ci-1", domain: "aws.amazon.com", status: "Active", dateAdded: "Oct 24, 2023", icon: <Cloud className="w-4 h-4" />, httpsRequired: true, subdomainsIncluded: true },
+        { id: "ci-2", domain: "alibabacloud.com", status: "Active", dateAdded: "Oct 22, 2023", icon: <Cloud className="w-4 h-4" />, httpsRequired: true, subdomainsIncluded: true },
+        { id: "ci-3", domain: "console.cloud.google.com", status: "Active", dateAdded: "Oct 20, 2023", icon: <Cloud className="w-4 h-4" />, httpsRequired: true, subdomainsIncluded: false },
+        { id: "ci-4", domain: "portal.azure.com", status: "Verify", dateAdded: "Nov 05, 2023", icon: <Cloud className="w-4 h-4" />, httpsRequired: true, subdomainsIncluded: false },
+    ],
+    "payment-gateway": [
+        { id: "pg-1", domain: "paylabs.co.id", status: "Active", dateAdded: "Nov 01, 2023", icon: <Globe className="w-4 h-4" />, httpsRequired: true, subdomainsIncluded: true },
+        { id: "pg-2", domain: "stripe.com", status: "Active", dateAdded: "Oct 28, 2023", icon: <Globe className="w-4 h-4" />, httpsRequired: true, subdomainsIncluded: true },
+        { id: "pg-3", domain: "api.midtrans.com", status: "Active", dateAdded: "Oct 15, 2023", icon: <Globe className="w-4 h-4" />, httpsRequired: true, subdomainsIncluded: false },
+        { id: "pg-4", domain: "checkout.xendit.co", status: "Verify", dateAdded: "Nov 10, 2023", icon: <Globe className="w-4 h-4" />, httpsRequired: false, subdomainsIncluded: false },
+        { id: "pg-5", domain: "paypal.com", status: "Verify", dateAdded: "Nov 12, 2023", icon: <Globe className="w-4 h-4" />, httpsRequired: true, subdomainsIncluded: true },
+    ],
+    "data-processing": [
+        { id: "dp-1", domain: "snowflake.com", status: "Active", dateAdded: "Sep 30, 2023", icon: <Globe className="w-4 h-4" />, httpsRequired: true, subdomainsIncluded: false },
+        { id: "dp-2", domain: "databricks.com", status: "Active", dateAdded: "Oct 05, 2023", icon: <Globe className="w-4 h-4" />, httpsRequired: true, subdomainsIncluded: true },
+        { id: "dp-3", domain: "bigquery.googleapis.com", status: "Active", dateAdded: "Oct 10, 2023", icon: <Cloud className="w-4 h-4" />, httpsRequired: true, subdomainsIncluded: true },
+    ],
+};
+
+// ── Component ───────────────────────────────────────────────────────────
 
 export const WhitelistManagementSection = () => {
     const [domainInput, setDomainInput] = useState("");
     const [currentPage, setCurrentPage] = useState(1);
-    const aiAccounts = [
-        { id: "cloud-infrastructure", name: "Cloud Infrastructure (ID: 8821-X)" },
-        { id: "payment-gateway", name: "Payment Gateway (ID: 4192-A)" },
-        { id: "data-processing", name: "Data Processing (ID: 2910-B)" },
-    ];
     const [activeAccount, setActiveAccount] = useState("cloud-infrastructure");
+    const [httpsRequired, setHttpsRequired] = useState(true);
+    const [subdomainsIncluded, setSubdomainsIncluded] = useState(true);
+    const [validationError, setValidationError] = useState("");
     const itemsPerPage = 10;
-    const [whitelistDomains, setWhitelistDomains] = useState<WhitelistDomain[]>([
-        {
-            id: "1",
-            domain: "aws.amazon.com",
-            status: "Active",
-            dateAdded: "Oct 24, 2023",
-            icon: <Cloud className="w-4 h-4" />,
-        },
-        {
-            id: "2",
-            domain: "alibabacloud.com",
-            status: "Active",
-            dateAdded: "Oct 22, 2023",
-            icon: <Cloud className="w-4 h-4" />,
-        },
-        {
-            id: "3",
-            domain: "paylabs.co.id",
-            status: "Verify",
-            dateAdded: "Nov 01, 2023",
-            icon: <Globe className="w-4 h-4" />,
-        },
-        {
-            id: "4",
-            domain: "paylabs.co.id",
-            status: "Verify",
-            dateAdded: "Nov 01, 2023",
-            icon: <Globe className="w-4 h-4" />,
-        },
-        {
-            id: "5",
-            domain: "paylabs.co.id",
-            status: "Verify",
-            dateAdded: "Nov 01, 2023",
-            icon: <Globe className="w-4 h-4" />,
-        },
-        {
-            id: "6",
-            domain: "paylabs.co.id",
-            status: "Verify",
-            dateAdded: "Nov 01, 2023",
-            icon: <Globe className="w-4 h-4" />,
-        },
-        {
-            id: "7",
-            domain: "paylabs.co.id",
-            status: "Verify",
-            dateAdded: "Nov 01, 2023",
-            icon: <Globe className="w-4 h-4" />,
-        },
-        {
-            id: "8",
-            domain: "paylabs.co.id",
-            status: "Verify",
-            dateAdded: "Nov 01, 2023",
-            icon: <Globe className="w-4 h-4" />,
-        },
-    ]);
+
+    const [domainsByAccount, setDomainsByAccount] = useState<Record<string, WhitelistDomain[]>>(INITIAL_DOMAINS);
+
+    const whitelistDomains = domainsByAccount[activeAccount] ?? [];
+
+    const handleAccountChange = (accountId: string) => {
+        setActiveAccount(accountId);
+        setCurrentPage(1);
+    };
+
+    const validateDomain = (raw: string): string | null => {
+        const domain = raw.trim().replace(/^https?:\/\//, "").replace(/\/+$/, "");
+        if (!domain) return "Please enter a domain";
+
+        if (!/^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/.test(domain)) {
+            return "Invalid domain format (e.g., example.com)";
+        }
+
+        if (whitelistDomains.some((d) => d.domain === domain)) {
+            return "This domain is already whitelisted";
+        }
+
+        return null;
+    };
 
     const handleAddToWhitelist = () => {
-        if (!domainInput.trim()) return;
+        const domain = domainInput.trim().replace(/^https?:\/\//, "").replace(/\/+$/, "");
+        const error = validateDomain(domainInput);
+        if (error) {
+            setValidationError(error);
+            return;
+        }
+
         const newDomain: WhitelistDomain = {
             id: Date.now().toString(),
-            domain: domainInput,
+            domain,
             status: "Verify",
             dateAdded: new Date().toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }),
             icon: <Globe className="w-4 h-4" />,
+            httpsRequired,
+            subdomainsIncluded,
         };
-        setWhitelistDomains([...whitelistDomains, newDomain]);
+        setDomainsByAccount((prev) => ({
+            ...prev,
+            [activeAccount]: [...(prev[activeAccount] ?? []), newDomain],
+        }));
         setDomainInput("");
+        setValidationError("");
     };
 
     const handleRemoveDomain = (domainId: string) => {
-        setWhitelistDomains(whitelistDomains.filter((d) => d.id !== domainId));
+        setDomainsByAccount((prev) => ({
+            ...prev,
+            [activeAccount]: (prev[activeAccount] ?? []).filter((d) => d.id !== domainId),
+        }));
     };
 
     const totalPages = Math.ceil(whitelistDomains.length / itemsPerPage);
@@ -121,8 +134,8 @@ export const WhitelistManagementSection = () => {
                             <label htmlFor="ai-account-select" className="font-medium text-white text-sm">
                                 Active AI Account
                             </label>
-                            <Select id="ai-account-select" value={activeAccount} onChange={(e) => setActiveAccount(e.target.value)}>
-                                {aiAccounts.map((account) => (
+                            <Select id="ai-account-select" value={activeAccount} onChange={(e) => handleAccountChange(e.target.value)}>
+                                {AI_ACCOUNTS.map((account) => (
                                     <option key={account.id} value={account.id}>
                                         {account.name}
                                     </option>
@@ -145,7 +158,13 @@ export const WhitelistManagementSection = () => {
                                 <Input
                                     id="trusted-domain-input"
                                     value={domainInput}
-                                    onChange={(e) => setDomainInput(e.target.value)}
+                                    onChange={(e) => {
+                                        setDomainInput(e.target.value);
+                                        if (validationError) setValidationError("");
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter") handleAddToWhitelist();
+                                    }}
                                     placeholder="e.g., paylabs.co.id"
                                     icon={<Globe className="w-5 h-5 text-slate" />}
                                     wrapperClassName="flex-1"
@@ -155,25 +174,22 @@ export const WhitelistManagementSection = () => {
                                     Add to Whitelist
                                 </Button>
                             </div>
+                            {validationError && (
+                                <p className="text-red-400 text-xs mt-1">{validationError}</p>
+                            )}
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-2 ml-1">
-                            <label className="flex items-center gap-2 text-sm text-slate cursor-pointer hover:text-white transition-colors">
-                                <input
-                                    type="checkbox"
-                                    className="w-4 h-4 rounded border-dark-border bg-darkish-grey text-blue focus:ring-blue focus:ring-offset-dark focus:ring-2"
-                                    defaultChecked
-                                />
-                                HTTPS Required
-                            </label>
-                            <label className="flex items-center gap-2 text-sm text-slate cursor-pointer hover:text-white transition-colors">
-                                <input
-                                    type="checkbox"
-                                    className="w-4 h-4 rounded border-dark-border bg-darkish-grey text-blue focus:ring-blue focus:ring-offset-dark focus:ring-2"
-                                    defaultChecked
-                                />
-                                Subdomains Included
-                            </label>
+                        <div className="flex flex-wrap items-center gap-x-8 gap-y-3 mt-1">
+                            <Toggle
+                                enabled={httpsRequired}
+                                onChange={() => setHttpsRequired(!httpsRequired)}
+                                label="HTTPS Required"
+                            />
+                            <Toggle
+                                enabled={subdomainsIncluded}
+                                onChange={() => setSubdomainsIncluded(!subdomainsIncluded)}
+                                label="Subdomains Included"
+                            />
                         </div>
                     </div>
                 </section>
@@ -189,11 +205,12 @@ export const WhitelistManagementSection = () => {
 
                     <div className="flex flex-col bg-darkish-grey rounded-xl border border-dark-border shadow-sm overflow-hidden">
                         <div className="overflow-x-auto">
-                            <table className="w-full min-w-[550px]">
+                            <table className="w-full min-w-[700px]">
                                 <thead>
                                     <tr className="bg-[#10162280] border-b border-dark-border">
                                         <th className="text-left px-6 py-4 font-bold text-[#cbd5e1] text-xs tracking-wider">DOMAIN NAME</th>
                                         <th className="text-left px-6 py-4 font-bold text-[#cbd5e1] text-xs tracking-wider">STATUS</th>
+                                        <th className="text-left px-6 py-4 font-bold text-[#cbd5e1] text-xs tracking-wider">OPTIONS</th>
                                         <th className="text-left px-6 py-4 font-bold text-[#cbd5e1] text-xs tracking-wider">DATE ADDED</th>
                                         <th className="text-right px-6 py-4 font-bold text-[#cbd5e1] text-xs tracking-wider">ACTIONS</th>
                                     </tr>
@@ -216,6 +233,25 @@ export const WhitelistManagementSection = () => {
                                                 <Badge variant={domain.status === "Active" ? "success" : "warning"} dot>
                                                     {domain.status}
                                                 </Badge>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    {domain.httpsRequired && (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-xs font-medium">
+                                                            <Lock className="w-3 h-3" />
+                                                            HTTPS
+                                                        </span>
+                                                    )}
+                                                    {domain.subdomainsIncluded && (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue/10 text-blue text-xs font-medium">
+                                                            <Network className="w-3 h-3" />
+                                                            Subs
+                                                        </span>
+                                                    )}
+                                                    {!domain.httpsRequired && !domain.subdomainsIncluded && (
+                                                        <span className="text-slate text-xs">—</span>
+                                                    )}
+                                                </div>
                                             </td>
                                             <td className="px-6 py-4">
                                                 <time className="text-[#9da6b9] text-sm">{domain.dateAdded}</time>
