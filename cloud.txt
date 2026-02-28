@@ -1,0 +1,3 @@
+aws.amazon.com
+azure.microsoft.com
+cloud.google.com
