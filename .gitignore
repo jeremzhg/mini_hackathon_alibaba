@@ -1,0 +1,9 @@
+__pycache__
+.venv
+
+limit/*
+!limit/.gitkeep
+category/*
+!category/.gitkeep
+current/*
+!current/.gitkeep
