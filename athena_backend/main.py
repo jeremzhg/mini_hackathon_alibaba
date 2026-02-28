@@ -1,25 +1,15 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException
 from pydantic import BaseModel
-from typing import Dict, List
+from typing import List
 import re
-import os
+from sqlalchemy.orm import Session
+from database import engine, Base, get_db
+from models import Category, Domain
+
+# Create tables
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="AI Security Interceptor")
-
-# Function to load whitelist from text files
-def load_whitelist() -> Dict[str, List[str]]:
-    whitelist = {}
-    
-    category_dir = "category"
-    if os.path.exists(category_dir):
-        for file in os.listdir(category_dir):
-            if file.endswith(".txt"):
-                file_path = os.path.join(category_dir, file)
-                with open(file_path, "r") as f:
-                    key = file.replace(".txt", "")
-                    whitelist[key] = [line.strip() for line in f if line.strip()]
-                
-    return whitelist
 
 # Pydantic models for the incoming request
 class InterceptRequest(BaseModel):
@@ -63,48 +53,49 @@ class InterceptResponse(BaseModel):
     security_summary: str
 
 @app.post("/api/v1/categories")
-def create_category(request: CategoryCreateRequest):
-    # Ensure directories exist
-    os.makedirs("category", exist_ok=True)
-    os.makedirs("limit", exist_ok=True)
-    os.makedirs("current", exist_ok=True)
+def create_category(request: CategoryCreateRequest, db: Session = Depends(get_db)):
+    db_category = db.query(Category).filter(Category.name == request.name.lower()).first()
+    if db_category:
+        raise HTTPException(status_code=400, detail="Category already exists")
 
-    category_file = os.path.join("category", f"{request.name.lower()}.txt")
-    with open(category_file, "w") as f:
-        if request.domains:
-            f.write("\n".join(request.domains))
-    
-    limit_file = os.path.join("limit", f"{request.name.lower()}_limit.txt")
-    with open(limit_file, "w") as f:
-        f.write(str(request.limit))
-        
-    current_file = os.path.join("current", f"{request.name.lower()}_current.txt")
-    with open(current_file, "w") as f:
-        f.write(str(request.limit))
+    new_category = Category(
+        name=request.name.lower(),
+        initial_limit=request.limit,
+        remaining_budget=request.limit
+    )
+    db.add(new_category)
+    db.commit()
+    db.refresh(new_category)
+
+    if request.domains:
+        for domain_name in request.domains:
+            new_domain = Domain(name=domain_name, category_id=new_category.id)
+            db.add(new_domain)
+        db.commit()
         
     return {
         "status": "success", 
-        "category": request.name, 
-        "limit": request.limit,
-        "message": f"Created category {request.name} with limit {request.limit}"
+        "category": new_category.name, 
+        "limit": new_category.initial_limit,
+        "message": f"Created category {new_category.name} with limit {new_category.initial_limit}"
     }
 
 @app.put("/api/v1/categories/{category_name}")
-def update_category(category_name: str, request: CategoryUpdateRequest):
-    # Ensure directory exists just in case
-    os.makedirs("category", exist_ok=True)
-    
-    category_file = os.path.join("category", f"{category_name.lower()}.txt")
-    
-    if not os.path.exists(category_file):
+def update_category(category_name: str, request: CategoryUpdateRequest, db: Session = Depends(get_db)):
+    db_category = db.query(Category).filter(Category.name == category_name.lower()).first()
+    if not db_category:
         return {
             "status": "error",
             "message": f"Category '{category_name}' not found."
         }
-        
-    with open(category_file, "w") as f:
-        if request.domains:
-            f.write("\n".join(request.domains))
+
+    # Clear existing domains and replace them
+    db.query(Domain).filter(Domain.category_id == db_category.id).delete()
+    if request.domains:
+        for domain_name in request.domains:
+            new_domain = Domain(name=domain_name, category_id=db_category.id)
+            db.add(new_domain)
+    db.commit()
             
     return {
         "status": "success",
@@ -113,9 +104,7 @@ def update_category(category_name: str, request: CategoryUpdateRequest):
     }
 
 @app.post("/api/v1/intercept", response_model=InterceptResponse)
-def intercept_action(request: InterceptRequest):
-    whitelist = load_whitelist()
-    
+def intercept_action(request: InterceptRequest, db: Session = Depends(get_db)):
     # Extract domain using regex, default to a google search URL if not found
     domain_match = re.search(r'(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}', request.user_task)
     extracted_domain = domain_match.group(0) if domain_match else 'https://www.google.com/search?q=unknown-domain.com'
@@ -135,29 +124,12 @@ def intercept_action(request: InterceptRequest):
         whitelist_reasoning="Validating domain..."
     )
 
-    # Validate active account category
-    initial_limit = 0.0
-    remaining_budget = 0.0
-    
-    # Try loading limit files if category exists
-    if request.active_account_category in whitelist:
-        limit_file = os.path.join("limit", f"{request.active_account_category.lower()}_limit.txt")
-        current_file = os.path.join("current", f"{request.active_account_category.lower()}_current.txt")
-        
-        if os.path.exists(limit_file):
-            with open(limit_file, "r") as f:
-                initial_limit = float(f.read().strip() or "0")
-        if os.path.exists(current_file):
-            with open(current_file, "r") as f:
-                remaining_budget = float(f.read().strip() or "0")
+    db_category = db.query(Category).filter(Category.name == request.active_account_category.lower()).first()
 
-    is_budget_sufficient = (remaining_budget - request.transaction_amount) >= 0
-
-    limit_verify = LimitVerification(initial_limit=initial_limit, remaining_budget=remaining_budget)
-
-    if request.active_account_category not in whitelist:
+    if not db_category:
+        limit_verify = LimitVerification(initial_limit=0.0, remaining_budget=0.0)
         context_verification.is_context_valid = False
-        context_verification.context_reasoning = f"Category '{request.active_account_category}' not found in whitelist."
+        context_verification.context_reasoning = f"Category '{request.active_account_category}' not found in database."
         return InterceptResponse(
             decision="BLOCK",
             extracted_data=extracted_data,
@@ -166,12 +138,18 @@ def intercept_action(request: InterceptRequest):
             limit_verification=limit_verify,
             security_summary=f"Invalid category: {request.active_account_category}"
         )
+
+    initial_limit = db_category.initial_limit
+    remaining_budget = db_category.remaining_budget
+    is_budget_sufficient = (remaining_budget - request.transaction_amount) >= 0
+
+    limit_verify = LimitVerification(initial_limit=initial_limit, remaining_budget=remaining_budget)
     
     context_verification.is_context_valid = True
     context_verification.context_reasoning = f"Category '{request.active_account_category}' is recognized."
 
-    # Validate extracted domain against the whitelist for the given category
-    approved_domains = whitelist[request.active_account_category]
+    # Validate extracted domain against the database for the given category
+    approved_domains = [d.name for d in db_category.domains]
     if extracted_domain in approved_domains:
         whitelist_verification.is_domain_approved = True
         whitelist_verification.whitelist_reasoning = f"Domain '{extracted_domain}' is approved for category '{request.active_account_category}'."
@@ -189,11 +167,9 @@ def intercept_action(request: InterceptRequest):
             
         # Deduct budget
         if request.transaction_amount > 0:
-            remaining_budget -= request.transaction_amount
-            limit_verify.remaining_budget = remaining_budget
-            current_file = os.path.join("current", f"{request.active_account_category.lower()}_current.txt")
-            with open(current_file, "w") as f:
-                f.write(str(remaining_budget))
+            db_category.remaining_budget -= request.transaction_amount
+            db.commit()
+            limit_verify.remaining_budget = db_category.remaining_budget
                 
         return InterceptResponse(
             decision="ALLOW",
