@@ -1,0 +1,7 @@
+src/dahsboard/index.tsx(8,31): error TS2503: Cannot find namespace 'JSX'.
+src/dahsboard/NavigationSideBar.tsx(13,45): error TS2503: Cannot find namespace 'JSX'.
+src/homepage/index.tsx(5,30): error TS2503: Cannot find namespace 'JSX'.
+src/signuppage/index.tsx(8,31): error TS2503: Cannot find namespace 'JSX'.
+src/whitelist/index.tsx(10,31): error TS2503: Cannot find namespace 'JSX'.
+src/whitelist/NavigationSidebarSection.tsx(13,45): error TS2503: Cannot find namespace 'JSX'.
+src/whitelist/WhitelistManager.tsx(24,47): error TS2503: Cannot find namespace 'JSX'.
