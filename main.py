@@ -10,24 +10,22 @@ app = FastAPI(title="AI Security Interceptor")
 def load_whitelist() -> Dict[str, List[str]]:
     whitelist = {}
     
-    if os.path.exists("cloud.txt"):
-        with open("cloud.txt", "r") as f:
-            whitelist["Cloud"] = [line.strip() for line in f if line.strip()]
-    else:
-        whitelist["Cloud"] = []
-        
-    if os.path.exists("groceries.txt"):
-        with open("groceries.txt", "r") as f:
-            whitelist["Grocery"] = [line.strip() for line in f if line.strip()]
-    else:
-        whitelist["Grocery"] = []
-        
+    for file in os.listdir("."):
+        if file.endswith(".txt") and not file.endswith("_limit.txt") and file != "requirements.txt":
+            with open(file, "r") as f:
+                key = file.replace(".txt", "")
+                whitelist[key] = [line.strip() for line in f if line.strip()]
+                
     return whitelist
 
 # Pydantic models for the incoming request
 class InterceptRequest(BaseModel):
     user_task: str
     active_account_category: str
+
+class CategoryCreateRequest(BaseModel):
+    name: str
+    limit: float
 
 # Pydantic models for response verification details
 class ExtractedData(BaseModel):
@@ -50,6 +48,23 @@ class InterceptResponse(BaseModel):
     context_verification: ContextVerification
     whitelist_verification: WhitelistVerification
     security_summary: str
+
+@app.post("/api/v1/categories")
+def create_category(request: CategoryCreateRequest):
+    category_file = f"{request.name.lower()}.txt"
+    if not os.path.exists(category_file):
+        open(category_file, "w").close()
+    
+    limit_file = f"{request.name.lower()}_limit.txt"
+    with open(limit_file, "w") as f:
+        f.write(str(request.limit))
+        
+    return {
+        "status": "success", 
+        "category": request.name, 
+        "limit": request.limit,
+        "message": f"Created category {request.name} with limit {request.limit}"
+    }
 
 @app.post("/api/v1/intercept", response_model=InterceptResponse)
 def intercept_action(request: InterceptRequest):
