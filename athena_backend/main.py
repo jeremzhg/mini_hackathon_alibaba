@@ -151,6 +151,8 @@ def intercept_action(request: InterceptRequest):
             with open(current_file, "r") as f:
                 remaining_budget = float(f.read().strip() or "0")
 
+    is_budget_sufficient = (remaining_budget - request.transaction_amount) >= 0
+
     limit_verify = LimitVerification(initial_limit=initial_limit, remaining_budget=remaining_budget)
 
     if request.active_account_category not in whitelist:
@@ -174,6 +176,17 @@ def intercept_action(request: InterceptRequest):
         whitelist_verification.is_domain_approved = True
         whitelist_verification.whitelist_reasoning = f"Domain '{extracted_domain}' is approved for category '{request.active_account_category}'."
         
+        # Check budget limits
+        if not is_budget_sufficient:
+            return InterceptResponse(
+                decision="BLOCK",
+                extracted_data=extracted_data,
+                context_verification=context_verification,
+                whitelist_verification=whitelist_verification,
+                limit_verification=limit_verify,
+                security_summary=f"Transaction blocked: Insufficient budget. Cost is {request.transaction_amount} but only {remaining_budget} remaining."
+            )
+            
         # Deduct budget
         if request.transaction_amount > 0:
             remaining_budget -= request.transaction_amount
