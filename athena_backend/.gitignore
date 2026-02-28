@@ -1,9 +1,3 @@
 __pycache__
 .venv
 .env
-limit/*
-!limit/.gitkeep
-category/*
-!category/.gitkeep
-current/*
-!current/.gitkeep

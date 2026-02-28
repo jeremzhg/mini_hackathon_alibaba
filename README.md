@@ -14,22 +14,32 @@ A functional FastAPI mock backend designed to act as middleware. It prevents aut
 1. **Install dependencies**:
    ```bash
    pip install -r requirements.txt
+   pip install sqlalchemy psycopg2-binary
    ```
 
-2. **Run the server**:
+2. **Database Configuration**:
+   The backend uses a PostgreSQL database. Set the `DATABASE_URL` environment variable if your database is not local:
+   *Linux/Mac*:
+   ```bash
+   export DATABASE_URL="postgresql://user:password@localhost:5432/dbname"
+   ```
+   *Windows (PowerShell)*:
+   ```powershell
+   $env:DATABASE_URL="postgresql://user:password@localhost:5432/dbname"
+   ```
+   By default, it will attempt to connect to: `postgresql://postgres:postgres@localhost:5432/postgres`
+
+3. **Run the server**:
    ```bash
    uvicorn main:app --reload
    ```
-   The server will start at `http://127.0.0.1:8000`.
+   The backend will automatically generate the required database tables upon startup!
 
 ## Whitelists & Limits
 
-The backend automatically loads categories, domains, and budgets from the following folders in the root directory:
-- `category/`: Contains `.txt` files where the name of the file represents the category and the contents represent whitelisted domains (one domain per line).
-- `limit/`: Contains original, unchanging budget constraints formatted as `{category}_limit.txt`.
-- `current/`: Contains actively tracked remaining budgets formatted as `{category}_current.txt` that are reduced dynamically.
+The backend automatically manages categories, domain whitelists, and tracking budgets within the PostgreSQL database via SQLAlchemy models (`categories` and `domains` tables).
 
-You can populate these files manually or utilize the `/api/v1/categories` endpoint to do so automatically.
+You can populate these tables directly or utilize the exposed `/api/v1/categories` endpoints to do so automatically.
 
 ## How to Use
 
@@ -57,7 +67,7 @@ Send a `POST` request to `/api/v1/categories` to create a new category and give 
 }
 ```
 
-Afterward, the file `category/cloud.txt` will automatically be created and populated with the allowed domains!
+Afterward, the database will contain the new `cloud` category and its allowed domains!
 
 ### Update a Category
 
