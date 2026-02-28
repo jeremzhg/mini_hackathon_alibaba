@@ -48,11 +48,32 @@ Send a `POST` request to `/api/v1/categories` to create a new category and give 
 ```json
 {
   "name": "cloud",
-  "limit": 5000.00
+  "limit": 5000.00,
+  "domains": [
+    "aws.amazon.com",
+    "azure.com",
+    "cloud.google.com"
+  ]
 }
 ```
 
-Afterward, navigate to `category/cloud.txt` and populate it with allowed domains (e.g., `aws.amazon.com`).
+Afterward, the file `category/cloud.txt` will automatically be created and populated with the allowed domains!
+
+### Update a Category
+
+To change the domains for an existing category, send a `PUT` request with the complete replacing list of domains:
+
+1. Method: `PUT`
+2. URL: `http://127.0.0.1:8000/api/v1/categories/cloud`
+
+**Request Body**:
+```json
+{
+  "domains": [
+    "aws.amazon.com"
+  ]
+}
+```
 
 ### Example Request (ALLOW)
 

@@ -30,6 +30,10 @@ class InterceptRequest(BaseModel):
 class CategoryCreateRequest(BaseModel):
     name: str
     limit: float
+    domains: List[str] = []
+
+class CategoryUpdateRequest(BaseModel):
+    domains: List[str] = []
 
 # Pydantic models for response verification details
 class ExtractedData(BaseModel):
@@ -66,8 +70,9 @@ def create_category(request: CategoryCreateRequest):
     os.makedirs("current", exist_ok=True)
 
     category_file = os.path.join("category", f"{request.name.lower()}.txt")
-    if not os.path.exists(category_file):
-        open(category_file, "w").close()
+    with open(category_file, "w") as f:
+        if request.domains:
+            f.write("\n".join(request.domains))
     
     limit_file = os.path.join("limit", f"{request.name.lower()}_limit.txt")
     with open(limit_file, "w") as f:
@@ -82,6 +87,29 @@ def create_category(request: CategoryCreateRequest):
         "category": request.name, 
         "limit": request.limit,
         "message": f"Created category {request.name} with limit {request.limit}"
+    }
+
+@app.put("/api/v1/categories/{category_name}")
+def update_category(category_name: str, request: CategoryUpdateRequest):
+    # Ensure directory exists just in case
+    os.makedirs("category", exist_ok=True)
+    
+    category_file = os.path.join("category", f"{category_name.lower()}.txt")
+    
+    if not os.path.exists(category_file):
+        return {
+            "status": "error",
+            "message": f"Category '{category_name}' not found."
+        }
+        
+    with open(category_file, "w") as f:
+        if request.domains:
+            f.write("\n".join(request.domains))
+            
+    return {
+        "status": "success",
+        "category": category_name,
+        "message": f"Updated active domains for category '{category_name}'."
     }
 
 @app.post("/api/v1/intercept", response_model=InterceptResponse)
