@@ -12,16 +12,16 @@ class Category(Base):
     initial_limit = Column(Float, default=0.0)
     remaining_budget = Column(Float, default=0.0)
 
-    domains = relationship("Domain", back_populates="category", cascade="all, delete-orphan")
-
-class Domain(Base):
-    __tablename__ = "domains"
+class Transaction(Base):
+    __tablename__ = "transactions"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
-    category_id = Column(Integer, ForeignKey("categories.id"))
-
-    category = relationship("Category", back_populates="domains")
+    amount = Column(Float)
+    merchant_id = Column(String)
+    category_name = Column(String)
+    purpose = Column(String)
+    status = Column(String, default="pending")
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 class History(Base):
     __tablename__ = "history"
