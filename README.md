@@ -1,13 +1,12 @@
 # AI Security Interceptor
 
-A functional FastAPI mock backend designed to act as middleware. It prevents autonomous AI agents from making unauthorized financial transactions by validating domains against a provided whitelist based on the active account category.
+A functional FastAPI mock backend designed to act as middleware. It prevents autonomous AI agents from making unauthorized financial transactions by validating the intent of the purchase against the active account category using a Gemini LLM.
 
 ## Features
 
-- Validates the `active_account_category` against the provided whitelist (loaded dynamically from `category/*.txt` files).
-- Tracks spending budgets dynamically stored in `limit/` and `current/` directories.
-- Extracts a domain/URL from a natural language `user_task` using regex.
-- Checks if the extracted domain is approved in the whitelist for the specific category.
+- Mocks a checkout flow (e.g., from Shopee) to generate pending transactions.
+- Uses **Gemini 2.5 Flash** to semantically verify if the `purpose` of the transaction aligns with the `active_account_category`.
+- Tracks spending budgets dynamically stored in a PostgreSQL database.
 - Returns a strict JSON response with a decision (`ALLOW` or `BLOCK`), detailed reasoning, and limit verifications.
 
 ## Setup
@@ -20,20 +19,14 @@ A functional FastAPI mock backend designed to act as middleware. It prevents aut
    ```
 
 2. **Database Configuration**:
-   The backend uses a PostgreSQL database. Set the `DATABASE_URL` environment variable if your database is not local:
-   _Linux/Mac_:
+   The backend uses a PostgreSQL database. Set the `DATABASE_URL` environment variable if your database is not local, and make sure to configure your `GEMINI_API_KEY`:
 
    ```bash
    export DATABASE_URL="postgresql://user:password@localhost:5432/dbname"
+   export GEMINI_API_KEY="your_api_key_here"
    ```
 
-   _Windows (PowerShell)_:
-
-   ```powershell
-   $env:DATABASE_URL="postgresql://user:password@localhost:5432/dbname"
-   ```
-
-   By default, it will attempt to connect to: `postgresql://postgres:postgres@localhost:5432/postgres`
+   _By default, it will attempt to connect to: `postgresql://postgres:postgres@localhost:5432/postgres` if no URL is provided._
 
 3. **Run the server**:
    ```bash
@@ -41,33 +34,82 @@ A functional FastAPI mock backend designed to act as middleware. It prevents aut
    ```
    The backend will automatically generate the required database tables upon startup!
 
-## Whitelists & Limits
+## Budgets & Categories
 
-The backend automatically manages categories, domain whitelists, and tracking budgets within the PostgreSQL database via SQLAlchemy models (`categories` and `domains` tables).
+The backend automatically manages categories and tracking budgets within the PostgreSQL database via SQLAlchemy models (`categories` and `transactions` tables).
 
 You can populate these tables directly or utilize the exposed `/api/v1/categories` endpoints to do so automatically.
 
-## How to Use
-
-You can test the API by sending a `POST` request to `/api/v1/intercept`.
-
-You can use the interactive Swagger UI by navigating to `http://127.0.0.1:8000/docs` in your browser.
-
-
-### Example Request (ALLOW)
-
-Here is a sample request simulating an authorized Cloud transaction, attempting to subtract from the tracked limit:
+### Example: Creating a Category
 
 1. Method: `POST`
-2. URL: `http://127.0.0.1:8000/api/v1/intercept`
+2. URL: `http://127.0.0.1:8000/api/v1/categories`
 
 **Request Body**:
 
 ```json
 {
-  "user_task": "Pay for the new database servers at aws.amazon.com immediately.",
-  "active_account_category": "cloud",
-  "transaction_amount": 1000.0
+  "name": "cloud",
+  "limit": 5000.0
+}
+```
+
+**Expected Response**:
+
+```json
+{
+  "status": "success",
+  "category": "cloud",
+  "limit": 5000.0,
+  "message": "Created category cloud with limit 5000.0"
+}
+```
+
+## How to Use
+
+You can test the API by simulating a transaction creation and then authorizing it.
+
+You can use the interactive Swagger UI by navigating to `http://127.0.0.1:8000/docs` in your browser.
+
+### Example Flow
+
+**Step 1. Create a Pending Transaction (Shopee Mock)**
+
+1. Method: `POST`
+2. URL: `http://127.0.0.1:8000/api/v1/shopee/create_transaction`
+
+**Request Body**:
+
+```json
+{
+  "amount": 1000.0,
+  "merchant_id": "shopee_1",
+  "category": "cloud",
+  "purpose": "Pay for the new database servers at AWS immediately."
+}
+```
+
+**Expected Response**:
+
+```json
+{
+  "transaction_id": 1
+}
+```
+
+**Step 2. Authorize the Transaction via AI Verification**
+
+This simulates the Agent supplying its assigned account ID array to complete the purchase.
+
+1. Method: `POST`
+2. URL: `http://127.0.0.1:8000/api/v1/authorize`
+
+**Request Body**:
+
+```json
+{
+  "account_id": "cloud",
+  "transaction_id": 1
 }
 ```
 
@@ -76,69 +118,17 @@ Here is a sample request simulating an authorized Cloud transaction, attempting 
 ```json
 {
   "decision": "ALLOW",
-  "extracted_data": {
-    "target_domain": "aws.amazon.com",
-    "purchase_nature": "Pay for the new database serve"
-  },
   "context_verification": {
     "account_category": "cloud",
     "is_context_valid": true,
-    "context_reasoning": "Category '\''cloud'\'' is recognized."
-  },
-  "whitelist_verification": {
-    "is_domain_approved": true,
-    "whitelist_reasoning": "Domain '\''aws.amazon.com'\'' is approved for category '\''cloud'\''."
+    "context_reasoning": "Gemini verified purchase is relevant."
   },
   "limit_verification": {
     "initial_limit": 5000.0,
     "remaining_budget": 4000.0
   },
-  "security_summary": "Transaction authorized. Domain and category are both approved."
+  "security_summary": "Transaction authorized. Context and budget are both approved."
 }
 ```
 
-### Example Request (BLOCK)
-
-If the AI tries to buy groceries using the Cloud account budget:
-
-**Postman Setup**:
-
-1. Method: `POST`
-2. URL: `http://127.0.0.1:8000/api/v1/intercept`
-3. Body tab -> raw -> JSON
-
-**Request Body**:
-
-```json
-{
-  "user_task": "Order 50 apples from walmart.com",
-  "active_account_category": "cloud",
-  "transaction_amount": 25.0
-}
-```
-
-**Expected Response**:
-
-```json
-{
-  "decision": "BLOCK",
-  "extracted_data": {
-    "target_domain": "walmart.com",
-    "purchase_nature": "Order 50 apples from walmart.c"
-  },
-  "context_verification": {
-    "account_category": "cloud",
-    "is_context_valid": true,
-    "context_reasoning": "Category '\''cloud'\'' is recognized."
-  },
-  "whitelist_verification": {
-    "is_domain_approved": false,
-    "whitelist_reasoning": "Domain '\''walmart.com'\'' is not approved for category '\''cloud'\''."
-  },
-  "limit_verification": {
-    "initial_limit": 5000.0,
-    "remaining_budget": 4000.0
-  },
-  "security_summary": "Domain walmart.com is unapproved for category cloud."
-}
-```
+If the purpose was "Buy a new smartphone" instead, Gemini would reject the context match for the "cloud" category, and the transaction would be `BLOCK`ed.
