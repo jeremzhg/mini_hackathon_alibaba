@@ -53,39 +53,6 @@ You can test the API by sending a `POST` request to `/api/v1/intercept`.
 
 You can use the interactive Swagger UI by navigating to `http://127.0.0.1:8000/docs` in your browser.
 
-### Create a Category
-
-Send a `POST` request to `/api/v1/categories` to create a new category and give it an initial maximum budget limit.
-
-1. Method: `POST`
-2. URL: `http://127.0.0.1:8000/api/v1/categories`
-
-**Request Body**:
-
-```json
-{
-  "name": "cloud",
-  "limit": 5000.0,
-  "domains": ["aws.amazon.com", "azure.com", "cloud.google.com"]
-}
-```
-
-Afterward, the database will contain the new `cloud` category and its allowed domains!
-
-### Update a Category
-
-To change the domains for an existing category, send a `PUT` request with the complete replacing list of domains:
-
-1. Method: `PUT`
-2. URL: `http://127.0.0.1:8000/api/v1/categories/cloud`
-
-**Request Body**:
-
-```json
-{
-  "domains": ["aws.amazon.com"]
-}
-```
 
 ### Example Request (ALLOW)
 
@@ -174,26 +141,4 @@ If the AI tries to buy groceries using the Cloud account budget:
   },
   "security_summary": "Domain walmart.com is unapproved for category cloud."
 }
-```
-
-### View History
-
-To retrieve all previously executed interception decisions, send a `GET` request to the `/api/v1/history` endpoint. The records will be returned sorted from newest to oldest.
-
-1. Method: `GET`
-2. URL: `http://127.0.0.1:8000/api/v1/history`
-
-**Expected Response**:
-
-```json
-[
-  {
-    "id": 1,
-    "user_task": "Pay for the new database servers at aws.amazon.com immediately.",
-    "active_account_category": "cloud",
-    "transaction_amount": 1000.0,
-    "decision": "ALLOW",
-    "timestamp": "2023-10-27T10:00:00.000000"
-  }
-]
 ```
