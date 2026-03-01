@@ -8,7 +8,11 @@ import hashlib
 import uuid
 from sqlalchemy.orm import Session
 from database import engine, Base, get_db
-from models import Category, Domain, History, User
+from models import Category, Transaction, History, User
+import google.generativeai as genai
+import os
+
+genai.configure(api_key=os.getenv("GEMINI_API_KEY", ""))
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -30,35 +34,18 @@ def hash_password(password: str) -> str:
 
 # ── Pydantic models ─────────────────────────────────────────────────────
 
-class InterceptRequest(BaseModel):
-    user_task: str
-    active_account_category: str
-    transaction_amount: float = 0.0
-
 class CategoryCreateRequest(BaseModel):
     name: str
     limit: float
-    domains: List[str] = []
-
-class CategoryUpdateRequest(BaseModel):
-    domains: List[str] = []
 
 class CategoryPatchRequest(BaseModel):
     name: Optional[str] = None
     limit: Optional[float] = None
 
-class ExtractedData(BaseModel):
-    target_domain: str
-    purchase_nature: str
-
 class ContextVerification(BaseModel):
     account_category: str
     is_context_valid: bool
     context_reasoning: str
-
-class WhitelistVerification(BaseModel):
-    is_domain_approved: bool
-    whitelist_reasoning: str
 
 class LimitVerification(BaseModel):
     initial_limit: float
@@ -78,11 +65,22 @@ class HistoryItem(BaseModel):
 
 class InterceptResponse(BaseModel):
     decision: str
-    extracted_data: ExtractedData
     context_verification: ContextVerification
-    whitelist_verification: WhitelistVerification
     limit_verification: LimitVerification
     security_summary: str
+
+class ShopeeCreateTransactionRequest(BaseModel):
+    amount: float
+    merchant_id: str
+    category: str
+    purpose: str
+
+class ShopeeCreateTransactionResponse(BaseModel):
+    transaction_id: int
+
+class AuthorizeTransactionRequest(BaseModel):
+    account_id: str
+    transaction_id: int
 
 # Auth models
 class SignupRequest(BaseModel):
@@ -248,7 +246,6 @@ def list_categories(db: Session = Depends(get_db)):
             "name": cat.name,
             "initial_limit": cat.initial_limit,
             "remaining_budget": cat.remaining_budget,
-            "domains": [d.name for d in cat.domains],
         }
         for cat in categories
     ]
@@ -268,12 +265,7 @@ def create_category(request: CategoryCreateRequest, db: Session = Depends(get_db
     db.commit()
     db.refresh(new_category)
 
-    if request.domains:
-        for domain_name in request.domains:
-            new_domain = Domain(name=domain_name, category_id=new_category.id)
-            db.add(new_domain)
-        db.commit()
-        
+
     return {
         "status": "success", 
         "category": new_category.name, 
@@ -327,120 +319,112 @@ def delete_category(category_name: str, db: Session = Depends(get_db)):
         "message": f"Category '{category_name}' deleted.",
     }
 
-@app.put("/api/v1/categories/{category_name}")
-def update_category(category_name: str, request: CategoryUpdateRequest, db: Session = Depends(get_db)):
-    db_category = db.query(Category).filter(Category.name == category_name.lower()).first()
-    if not db_category:
-        return {
-            "status": "error",
-            "message": f"Category '{category_name}' not found."
-        }
-
-    # Clear existing domains and replace them
-    db.query(Domain).filter(Domain.category_id == db_category.id).delete()
-    if request.domains:
-        for domain_name in request.domains:
-            new_domain = Domain(name=domain_name, category_id=db_category.id)
-            db.add(new_domain)
-    db.commit()
-            
-    return {
-        "status": "success",
-        "category": category_name,
-        "message": f"Updated active domains for category '{category_name}'."
-    }
 
 
 # ═══════════════════════════════════════════════════════════════════════
 # INTERCEPT & HISTORY ENDPOINTS
 # ═══════════════════════════════════════════════════════════════════════
 
-@app.post("/api/v1/intercept", response_model=InterceptResponse)
-def intercept_action(request: InterceptRequest, db: Session = Depends(get_db)):
-    domain_match = re.search(r'(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}', request.user_task)
-    extracted_domain = domain_match.group(0) if domain_match else 'https://www.google.com/search?q=unknown-domain.com'
+@app.post("/api/v1/shopee/create_transaction", response_model=ShopeeCreateTransactionResponse)
+def create_shopee_transaction(request: ShopeeCreateTransactionRequest, db: Session = Depends(get_db)):
+    transaction = Transaction(
+        amount=request.amount,
+        merchant_id=request.merchant_id,
+        category_name=request.category,
+        purpose=request.purpose,
+        status="pending"
+    )
+    db.add(transaction)
+    db.commit()
+    db.refresh(transaction)
+    return {"transaction_id": 1} # Hardcoded for demo as requested
+
+@app.post("/api/v1/authorize", response_model=InterceptResponse)
+def authorize_transaction(request: AuthorizeTransactionRequest, db: Session = Depends(get_db)):
+    # Since ID is hardcoded to 1 in demo, we just fetch the latest transaction created
+    transaction = db.query(Transaction).order_by(Transaction.id.desc()).first()
     
-    purchase_nature = request.user_task[:30]
-    
-    extracted_data = ExtractedData(target_domain=extracted_domain, purchase_nature=purchase_nature)
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
     context_verification = ContextVerification(
-        account_category=request.active_account_category, 
+        account_category=request.account_id, 
         is_context_valid=False, 
         context_reasoning="Validating category..."
     )
-    whitelist_verification = WhitelistVerification(
-        is_domain_approved=False,
-        whitelist_reasoning="Validating domain..."
-    )
 
-    db_category = db.query(Category).filter(Category.name == request.active_account_category.lower()).first()
+    db_category = db.query(Category).filter(Category.name == request.account_id.lower()).first()
 
     if not db_category:
         limit_verify = LimitVerification(initial_limit=0.0, remaining_budget=0.0)
         context_verification.is_context_valid = False
-        context_verification.context_reasoning = f"Category '{request.active_account_category}' not found in database."
+        context_verification.context_reasoning = f"Category '{request.account_id}' not found in database."
         response = InterceptResponse(
             decision="BLOCK",
-            extracted_data=extracted_data,
             context_verification=context_verification,
-            whitelist_verification=whitelist_verification,
             limit_verification=limit_verify,
-            security_summary=f"Invalid category: {request.active_account_category}"
+            security_summary=f"Invalid category: {request.account_id}"
         )
     else:
         initial_limit = db_category.initial_limit
         remaining_budget = db_category.remaining_budget
-        is_budget_sufficient = (remaining_budget - request.transaction_amount) >= 0
+        is_budget_sufficient = (remaining_budget - transaction.amount) >= 0
 
         limit_verify = LimitVerification(initial_limit=initial_limit, remaining_budget=remaining_budget)
         
-        context_verification.is_context_valid = True
-        context_verification.context_reasoning = f"Category '{request.active_account_category}' is recognized."
+        # Call Gemini to check context
+        prompt = f"Account category is '{db_category.name}'. The user's intended purchase is '{transaction.purpose}'. Is this purchase relevant to the account purpose? Answer only 'YES' or 'NO'."
+        
+        try:
+            model = genai.GenerativeModel('gemini-2.5-flash')
+            res = model.generate_content(prompt)
+            answer = res.text.strip().upper()
+            is_valid_context = "YES" in answer
+        except Exception as e:
+            is_valid_context = False
+            answer = f"Error calling Gemini: {e}"
 
-        approved_domains = [d.name for d in db_category.domains]
-        if extracted_domain in approved_domains:
-            whitelist_verification.is_domain_approved = True
-            whitelist_verification.whitelist_reasoning = f"Domain '{extracted_domain}' is approved for category '{request.active_account_category}'."
+        if is_valid_context:
+            context_verification.is_context_valid = True
+            context_verification.context_reasoning = "Gemini verified purchase is relevant."
             
             if not is_budget_sufficient:
                 response = InterceptResponse(
                     decision="BLOCK",
-                    extracted_data=extracted_data,
                     context_verification=context_verification,
-                    whitelist_verification=whitelist_verification,
                     limit_verification=limit_verify,
-                    security_summary=f"Transaction blocked: Insufficient budget. Cost is {request.transaction_amount} but only {remaining_budget} remaining."
+                    security_summary=f"Transaction blocked: Insufficient budget. Cost is {transaction.amount} but only {remaining_budget} remaining."
                 )
             else:
-                if request.transaction_amount > 0:
-                    db_category.remaining_budget -= request.transaction_amount
+                if transaction.amount > 0:
+                    db_category.remaining_budget -= transaction.amount
+                    transaction.status = "approved"
                     db.commit()
                     limit_verify.remaining_budget = db_category.remaining_budget
                         
                 response = InterceptResponse(
                     decision="ALLOW",
-                    extracted_data=extracted_data,
                     context_verification=context_verification,
-                    whitelist_verification=whitelist_verification,
                     limit_verification=limit_verify,
-                    security_summary="Transaction authorized. Domain and category are both approved."
+                    security_summary="Transaction authorized. Context and budget are both approved."
                 )
         else:
-            whitelist_verification.is_domain_approved = False
-            whitelist_verification.whitelist_reasoning = f"Domain '{extracted_domain}' is not approved for category '{request.active_account_category}'."
+            context_verification.is_context_valid = False
+            context_verification.context_reasoning = f"Gemini rejected context: {answer}"
+            transaction.status = "rejected"
+            db.commit()
+            
             response = InterceptResponse(
                 decision="BLOCK",
-                extracted_data=extracted_data,
                 context_verification=context_verification,
-                whitelist_verification=whitelist_verification,
                 limit_verification=limit_verify,
-                security_summary=f"Domain {extracted_domain} is unapproved for category {request.active_account_category}."
+                security_summary=f"Purchase '{transaction.purpose}' is not relevant for category '{request.account_id}'."
             )
 
     history_record = History(
-        user_task=request.user_task,
-        active_account_category=request.active_account_category,
-        transaction_amount=request.transaction_amount,
+        user_task=transaction.purpose,
+        active_account_category=request.account_id,
+        transaction_amount=transaction.amount,
         decision=response.decision,
         timestamp=datetime.datetime.utcnow()
     )
