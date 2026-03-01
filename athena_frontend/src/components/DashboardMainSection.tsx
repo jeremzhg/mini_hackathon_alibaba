@@ -111,8 +111,11 @@ const LoadingSkeleton = () => (
 
 // ── Main Component ─────────────────────────────────────────────────────
 
+import { useState } from "react";
+
 export const DashboardMainSection = () => {
-  const { stats, chartData, transactions, isLoading, error, refetch } = useDashboardData();
+  const [timeRange, setTimeRange] = useState<"24h" | "7d" | "30d">("24h");
+  const { stats, chartData, transactions, isLoading, error, refetch } = useDashboardData(timeRange);
 
   if (isLoading) {
     return (
@@ -178,9 +181,21 @@ export const DashboardMainSection = () => {
               <div className="w-3 h-3 bg-red-500 rounded-full" />
               <span className="font-medium text-slate text-xs">Blocked</span>
             </div>
-            <div className="flex items-center gap-2 px-2.5 py-1 bg-[#101622] rounded border border-[#2d3648]">
-              <span className="text-slate text-xs">Last 24 Hours</span>
-              <Calendar className="w-3.5 h-3.5 text-slate" />
+            <div className="flex items-center">
+              <div className="relative">
+                <select
+                  value={timeRange}
+                  onChange={(e) => setTimeRange(e.target.value as "24h" | "7d" | "30d")}
+                  className="appearance-none bg-[#101622] text-slate text-xs pl-2.5 pr-8 py-1 rounded border border-[#2d3648] outline-none cursor-pointer focus:border-[#4a5568]"
+                >
+                  <option value="24h">Last 24 Hours</option>
+                  <option value="7d">Last 7 Days</option>
+                  <option value="30d">Last 30 Days</option>
+                </select>
+                <div className="absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                  <Calendar className="w-3.5 h-3.5 text-slate" />
+                </div>
+              </div>
             </div>
           </div>
         </div>

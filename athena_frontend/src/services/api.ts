@@ -148,7 +148,9 @@ export async function getHistory(): Promise<ApiHistoryItem[]> {
 
 // ── Dashboard data (derived from real endpoints) ───────────────────────
 
-export async function getDashboardData(): Promise<DashboardData> {
+export type TimeRange = "24h" | "7d" | "30d";
+
+export async function getDashboardData(timeRange: TimeRange = "24h"): Promise<DashboardData> {
     const [categories, history] = await Promise.all([
         getCategories(),
         getHistory(),
@@ -159,8 +161,23 @@ export async function getDashboardData(): Promise<DashboardData> {
         (sum, c) => sum + (c.initial_limit - c.remaining_budget),
         0
     );
-    const totalTransactions = history.length;
-    const blockedCount = history.filter((h) => h.decision === "BLOCK").length;
+
+    const now = new Date();
+    
+    // Filter history based on timeRange
+    const filteredHistory = history.filter(item => {
+        const itemDate = new Date(item.timestamp);
+        const diffTime = now.getTime() - itemDate.getTime();
+        const diffHours = diffTime / (1000 * 60 * 60);
+        
+        if (timeRange === "24h") return diffHours <= 24;
+        if (timeRange === "7d") return diffHours <= 24 * 7;
+        if (timeRange === "30d") return diffHours <= 24 * 30;
+        return true;
+    });
+
+    const totalTransactions = filteredHistory.length;
+    const blockedCount = filteredHistory.filter((h) => h.decision === "BLOCK").length;
     const activeCategories = categories.length;
 
     const stats: DashboardStat[] = [
@@ -198,26 +215,55 @@ export async function getDashboardData(): Promise<DashboardData> {
         },
     ];
 
-    // Build chart data — group history by hour
-    const hourBuckets: Record<string, { allowed: number; blocked: number }> = {};
-    for (let h = 0; h < 24; h += 2) {
-        const label = `${h.toString().padStart(2, "0")}:00`;
-        hourBuckets[label] = { allowed: 0, blocked: 0 };
-    }
+    let chartData: ChartDataPoint[] = [];
 
-    for (const item of history) {
-        const date = new Date(item.timestamp);
-        const hourSlot = Math.floor(date.getHours() / 2) * 2;
-        const label = `${hourSlot.toString().padStart(2, "0")}:00`;
-        if (hourBuckets[label]) {
-            if (item.decision === "ALLOW") hourBuckets[label].allowed++;
-            else hourBuckets[label].blocked++;
+    if (timeRange === "24h") {
+        // Build chart data — group history by hour
+        const hourBuckets: Record<string, { allowed: number; blocked: number }> = {};
+        for (let h = 0; h < 24; h += 2) {
+            const label = `${h.toString().padStart(2, "0")}:00`;
+            hourBuckets[label] = { allowed: 0, blocked: 0 };
         }
-    }
 
-    const chartData: ChartDataPoint[] = Object.entries(hourBuckets).map(
-        ([time, counts]) => ({ time, ...counts })
-    );
+        for (const item of filteredHistory) {
+            const date = new Date(item.timestamp);
+            const hourSlot = Math.floor(date.getHours() / 2) * 2;
+            const label = `${hourSlot.toString().padStart(2, "0")}:00`;
+            if (hourBuckets[label]) {
+                if (item.decision === "ALLOW") hourBuckets[label].allowed++;
+                else hourBuckets[label].blocked++;
+            }
+        }
+
+        chartData = Object.entries(hourBuckets).map(
+            ([time, counts]) => ({ time, ...counts })
+        );
+    } else {
+        // Build chart data - group history by day for 7d or 30d
+        const days = timeRange === "7d" ? 7 : 30;
+        const dayBuckets: Record<string, { allowed: number; blocked: number }> = {};
+        
+        // Initialize buckets
+        for (let i = days - 1; i >= 0; i--) {
+            const d = new Date(now);
+            d.setDate(d.getDate() - i);
+            const label = `${d.getMonth() + 1}/${d.getDate().toString().padStart(2, '0')}`;
+            dayBuckets[label] = { allowed: 0, blocked: 0 };
+        }
+
+        for (const item of filteredHistory) {
+            const date = new Date(item.timestamp);
+            const label = `${date.getMonth() + 1}/${date.getDate().toString().padStart(2, '0')}`;
+            if (dayBuckets[label]) {
+                if (item.decision === "ALLOW") dayBuckets[label].allowed++;
+                else dayBuckets[label].blocked++;
+            }
+        }
+
+        chartData = Object.entries(dayBuckets).map(
+            ([time, counts]) => ({ time, ...counts })
+        );
+    }
 
     return { stats, chartData };
 }
