@@ -5,7 +5,7 @@ import { DashboardLayout } from "./components/layouts/DashboardLayout";
 import { DashboardPage } from "./pages/DashboardPage";
 import { WhitelistPage } from "./pages/WhitelistPage";
 import { TransactionPage } from "./pages/TransactionPage";
-import { AIAgentsPage } from "./pages/AIAgentsPage";
+import { CategoriesPage } from "./pages/CategoriesPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
 function App() {
@@ -21,7 +21,7 @@ function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/whitelist" element={<WhitelistPage />} />
           <Route path="/transaction" element={<TransactionPage />} />
-          <Route path="/ai-agents" element={<AIAgentsPage />} />
+          <Route path="/categories" element={<CategoriesPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowUpRight, ArrowDownLeft } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { Badge } from "./ui/Badge";
 import { SearchInput } from "./ui/SearchInput";
 import { TablePagination } from "./ui/TablePagination";
@@ -7,22 +7,10 @@ import type { Transaction } from "../data/transactions";
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 
-const getTypeIcon = (type: string) =>
-    type === "inbound" ? (
-        <ArrowDownLeft className="w-4 h-4 text-emerald-400" />
-    ) : (
-        <ArrowUpRight className="w-4 h-4 text-red-400" />
-    );
-
-const getTypeClass = (type: string) =>
-    type === "inbound" ? "bg-emerald-500/10" : "bg-red-500/10";
-
-const getAmountClass = (type: string) =>
-    type === "inbound" ? "text-emerald-400" : "text-red-400";
-
 const getStatusVariant = (status: string) => {
-    if (status === "Completed") return "success" as const;
+    if (status === "Allowed") return "success" as const;
     if (status === "Pending") return "warning" as const;
+    if (status === "Blocked") return "danger" as const;
     return "default" as const;
 };
 
@@ -55,17 +43,23 @@ export const TransactionTable = ({
 }: TransactionTableProps) => {
     const [searchQuery, setSearchQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState("all");
+    const [categoryFilter, setCategoryFilter] = useState("all");
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(defaultPerPage);
+
+    // Extract unique categories for the filter dropdown
+    const uniqueCategories = Array.from(new Set(data.map((t) => t.category))).sort();
 
     const filteredData = data.filter((txn) => {
         const matchesSearch =
             txn.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            txn.agent.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            txn.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
             txn.id.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesStatus =
             statusFilter === "all" || txn.status.toLowerCase() === statusFilter;
-        return matchesSearch && matchesStatus;
+        const matchesCategory =
+            categoryFilter === "all" || txn.category === categoryFilter;
+        return matchesSearch && matchesStatus && matchesCategory;
     });
 
     const totalPages = Math.ceil(filteredData.length / itemsPerPage);
@@ -79,6 +73,11 @@ export const TransactionTable = ({
 
     const handleStatusChange = (value: string) => {
         setStatusFilter(value);
+        setCurrentPage(1);
+    };
+
+    const handleCategoryChange = (value: string) => {
+        setCategoryFilter(value);
         setCurrentPage(1);
     };
 
@@ -108,11 +107,21 @@ export const TransactionTable = ({
                                     className="px-3 py-2 bg-[#101622] rounded-lg border border-[#2d3648] text-sm text-white focus:outline-none focus:border-blue transition-colors cursor-pointer"
                                 >
                                     <option value="all">All Status</option>
-                                    <option value="completed">Completed</option>
+                                    <option value="allowed">Allowed</option>
                                     <option value="pending">Pending</option>
-                                    <option value="failed">Failed</option>
+                                    <option value="blocked">Blocked</option>
                                 </select>
                             )}
+                            <select
+                                value={categoryFilter}
+                                onChange={(e) => handleCategoryChange(e.target.value)}
+                                className="px-3 py-2 bg-[#101622] rounded-lg border border-[#2d3648] text-sm text-white focus:outline-none focus:border-blue transition-colors cursor-pointer"
+                            >
+                                <option value="all">All Categories</option>
+                                {uniqueCategories.map((cat) => (
+                                    <option key={cat} value={cat}>{cat}</option>
+                                ))}
+                            </select>
                         </div>
                     )}
                 </div>
@@ -128,7 +137,7 @@ export const TransactionTable = ({
                                     TRANSACTION
                                 </th>
                                 <th className="text-left px-6 py-4 font-bold text-[#64748b] text-xs tracking-wider">
-                                    AGENT
+                                    CATEGORY
                                 </th>
                                 <th className="text-left px-6 py-4 font-bold text-[#64748b] text-xs tracking-wider">
                                     DATE
@@ -152,11 +161,9 @@ export const TransactionTable = ({
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-3">
                                             <div
-                                                className={`w-8 h-8 rounded-lg flex items-center justify-center ${getTypeClass(
-                                                    txn.type
-                                                )}`}
+                                                className="w-8 h-8 rounded-lg flex items-center justify-center bg-red-500/10"
                                             >
-                                                {getTypeIcon(txn.type)}
+                                                <ArrowUpRight className="w-4 h-4 text-red-400" />
                                             </div>
                                             <div className="flex flex-col">
                                                 <span className="text-white text-sm font-medium">
@@ -171,10 +178,10 @@ export const TransactionTable = ({
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-2">
                                             <div
-                                                className={`w-2 h-2 ${txn.agentColor} rounded-full`}
+                                                className={`w-2 h-2 ${txn.categoryColor} rounded-full`}
                                             />
                                             <span className="font-medium text-white text-sm">
-                                                {txn.agent}
+                                                {txn.category}
                                             </span>
                                         </div>
                                     </td>
@@ -187,11 +194,7 @@ export const TransactionTable = ({
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                        <span
-                                            className={`text-sm font-semibold ${getAmountClass(
-                                                txn.type
-                                            )}`}
-                                        >
+                                        <span className="text-sm font-semibold text-red-400">
                                             {txn.amount}
                                         </span>
                                     </td>

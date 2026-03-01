@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, ShieldCheck, Wallet, Bot, Settings, Cpu } from "lucide-react";
+import { LayoutDashboard, ShieldCheck, Wallet, Tag, Settings } from "lucide-react";
+import { GiSpartanHelmet } from "react-icons/gi";
 import { NavigationSidebar } from "./NavigationSidebar";
 import type { NavigationItem } from "./NavigationSidebar";
 
@@ -21,9 +22,9 @@ const navigationItems: NavigationItem[] = [
         icon: <Wallet className="w-5 h-5" />,
     },
     {
-        id: "ai-agents",
-        label: "AI Agents",
-        icon: <Bot className="w-5 h-5" />,
+        id: "categories",
+        label: "Categories",
+        icon: <Tag className="w-5 h-5" />,
     },
     {
         id: "settings",
@@ -48,7 +49,7 @@ export const Sidebar = () => {
 
     return (
         <NavigationSidebar
-            logo={<Cpu className="w-8 h-8 text-blue" />}
+            logo={<GiSpartanHelmet className="w-8 h-8 text-blue" />}
             items={navigationItems}
             activeItemId={activeItem}
             onNavigate={handleNavigate}

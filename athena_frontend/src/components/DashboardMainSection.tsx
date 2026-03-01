@@ -120,7 +120,7 @@ export const DashboardMainSection = () => {
       <>
         <PageHeader
           title="Overview"
-          subtitle="Monitor real-time security threats and transaction integrity."
+          subtitle="Monitor your credit card spending and category limits."
         />
         <LoadingSkeleton />
       </>
@@ -150,7 +150,7 @@ export const DashboardMainSection = () => {
     <>
       <PageHeader
         title="Overview"
-        subtitle="Monitor real-time security threats and transaction integrity."
+        subtitle="Monitor your credit card spending and category limits."
       />
 
       {/* Stat Cards */}

@@ -1,7 +1,7 @@
 import React from 'react';
 
 interface BadgeProps extends React.HTMLAttributes<HTMLDivElement> {
-    variant?: 'success' | 'warning' | 'info' | 'default';
+    variant?: 'success' | 'warning' | 'info' | 'danger' | 'default';
     dot?: boolean;
 }
 
@@ -10,6 +10,7 @@ export const Badge = ({ className = '', variant = 'default', dot = false, childr
         success: 'bg-[#10b9811a] border-[#10b98133] text-emerald-400',
         warning: 'bg-[#f59e0b1a] border-[#f59e0b33] text-amber-400',
         info: 'bg-[#1e3a8a4c] border-[#1e3a8a80] text-blue',
+        danger: 'bg-[#ef44441a] border-[#ef444433] text-red-400',
         default: 'bg-dark-border border-dark-border text-slate'
     };
 
@@ -17,6 +18,7 @@ export const Badge = ({ className = '', variant = 'default', dot = false, childr
         success: 'bg-emerald-500',
         warning: 'bg-amber-500',
         info: 'bg-blue',
+        danger: 'bg-red-500',
         default: 'bg-slate'
     };
 

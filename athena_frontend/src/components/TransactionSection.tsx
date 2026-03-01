@@ -6,18 +6,14 @@ import { TRANSACTIONS } from "../data/transactions";
 // ── Component ──────────────────────────────────────────────────────────
 
 export const TransactionSection = () => {
-    const totalInflow = TRANSACTIONS.filter((t) => t.type === "inbound").reduce(
-        (sum, t) => sum + parseFloat(t.amount.replace(/[^0-9.-]/g, "")),
-        0
-    );
-    const totalOutflow = TRANSACTIONS.filter(
-        (t) => t.type === "outbound" && t.status !== "Failed"
+    const totalSpend = TRANSACTIONS.filter(
+        (t) => t.status !== "Blocked"
     ).reduce((sum, t) => sum + Math.abs(parseFloat(t.amount.replace(/[^0-9.-]/g, ""))), 0);
 
     const handleExport = () => {
-        const headers = ["ID", "Description", "Agent", "Date", "Time", "Amount", "Type", "Status"];
+        const headers = ["ID", "Description", "Category", "Date", "Time", "Amount", "Status"];
         const rows = TRANSACTIONS.map((t) =>
-            [t.id, t.description, t.agent, t.timestamp, t.time, t.amount, t.type, t.status].join(",")
+            [t.id, t.description, t.category, t.timestamp, t.time, t.amount, t.status].join(",")
         );
         const csv = [headers.join(","), ...rows].join("\n");
         const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -33,7 +29,7 @@ export const TransactionSection = () => {
         <>
             <PageHeader
                 title="Transactions"
-                subtitle="View and manage AI agent financial activity."
+                subtitle="View and manage credit card spending activity."
             >
                 <button
                     onClick={handleExport}
@@ -47,21 +43,15 @@ export const TransactionSection = () => {
             {/* Summary Cards */}
             <div className="flex flex-wrap gap-4">
                 <div className="flex-1 min-w-[200px] flex flex-col gap-2 p-5 bg-darkish-grey rounded-xl border border-dark-border">
-                    <span className="text-slate text-sm font-medium">Total Inflow</span>
-                    <span className="text-emerald-400 text-2xl font-bold">
-                        +${totalInflow.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                    </span>
-                </div>
-                <div className="flex-1 min-w-[200px] flex flex-col gap-2 p-5 bg-darkish-grey rounded-xl border border-dark-border">
-                    <span className="text-slate text-sm font-medium">Total Outflow</span>
+                    <span className="text-slate text-sm font-medium">Total Spend</span>
                     <span className="text-red-400 text-2xl font-bold">
-                        -${totalOutflow.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                        -${totalSpend.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                     </span>
                 </div>
                 <div className="flex-1 min-w-[200px] flex flex-col gap-2 p-5 bg-darkish-grey rounded-xl border border-dark-border">
                     <span className="text-slate text-sm font-medium">Blocked Transactions</span>
                     <span className="text-yellow-400 text-2xl font-bold">
-                        {TRANSACTIONS.filter((t) => t.status === "Failed").length}
+                        {TRANSACTIONS.filter((t) => t.status === "Blocked").length}
                     </span>
                 </div>
             </div>

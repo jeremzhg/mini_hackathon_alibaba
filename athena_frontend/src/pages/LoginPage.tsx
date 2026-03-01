@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Eye, EyeOff, Cpu } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
+import { GiSpartanHelmet } from "react-icons/gi";
 import { useNavigate, Link } from "react-router-dom";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
@@ -24,13 +25,20 @@ export const LoginPage = () => {
         <div className="flex min-h-screen bg-dark w-full overflow-hidden text-white font-sans">
             {/* Left Marketing Section */}
             <section className="hidden lg:flex flex-col relative flex-1 bg-[#0b0e14] border-r border-dark-border overflow-hidden">
-                <div className="absolute inset-0 bg-[linear-gradient(124deg,rgba(19,91,236,0.2)_0%,rgba(11,14,20,1)_50%,rgba(11,14,20,1)_100%)] opacity-60 z-0" />
-                <div className="absolute top-[-205px] -left-16 w-[500px] h-[500px] bg-[#135bec1a] rounded-full blur-[60px] z-0" />
-                <div className="absolute inset-0 z-0 bg-dark opacity-50" />
+                {/* Full background image */}
+                <div className="absolute inset-0 z-0">
+                    <img
+                        src="/auth-bg.png"
+                        alt=""
+                        className="w-full h-full object-cover opacity-60"
+                    />
+                </div>
+                {/* Bottom gradient so text is readable */}
+                <div className="absolute inset-0 z-[1] bg-gradient-to-t from-[#0b0e14] via-[#0b0e14]/60 to-transparent" />
 
                 <div className="relative z-10 flex flex-col h-full p-12">
                     <header className="mb-auto flex items-center gap-2">
-                        <Cpu className="w-8 h-8 text-blue" />
+                        <GiSpartanHelmet className="w-8 h-8 text-blue" />
                         <span className="font-bold text-2xl tracking-widest text-white">Athena</span>
                     </header>
 
@@ -40,7 +48,7 @@ export const LoginPage = () => {
                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-hover opacity-75" />
                                 <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-hover" />
                             </span>
-                            <span className="font-semibold text-xs tracking-wide">Active Threat Monitoring</span>
+                            <span className="font-semibold text-xs tracking-wide">Live Spending Protection</span>
                         </div>
 
                         <h2 className="text-4xl font-bold leading-tight mt-4">
@@ -52,7 +60,7 @@ export const LoginPage = () => {
                         </h2>
 
                         <p className="text-slate text-lg leading-relaxed max-w-md">
-                            Sign in to monitor your AI agents, review security alerts, and manage transaction policies.
+                            Sign in to monitor your spending, review category budgets, and manage transaction limits.
                         </p>
                     </div>
                 </div>
@@ -62,8 +70,13 @@ export const LoginPage = () => {
             <section className="flex flex-col flex-1 items-center justify-center p-8 lg:p-12 relative overflow-y-auto w-full">
                 <div className="flex flex-col w-full max-w-md gap-8">
                     <header className="flex flex-col items-center gap-2 text-center">
+                        {/* Mobile-only logo */}
+                        <div className="flex items-center gap-2 mb-4 lg:hidden">
+                            <GiSpartanHelmet className="w-8 h-8 text-blue" />
+                            <span className="font-bold text-2xl tracking-widest">Athena</span>
+                        </div>
                         <h1 className="font-bold text-3xl tracking-tight">Welcome Back</h1>
-                        <p className="text-slate text-base">Secure your autonomous AI agents.</p>
+                        <p className="text-slate text-base">Sign in to manage your credit card limits.</p>
                     </header>
 
                     <form className="flex flex-col gap-5 w-full" onSubmit={handleSubmit}>

@@ -69,7 +69,7 @@ export const SettingsSection = () => {
         <>
             <PageHeader
                 title="Settings"
-                subtitle="Configure your Athena account and preferences."
+                subtitle="Configure your account and credit card preferences."
             >
                 <Button
                     variant="outline"
