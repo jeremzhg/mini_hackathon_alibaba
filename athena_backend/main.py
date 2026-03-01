@@ -2,9 +2,10 @@ from fastapi import FastAPI, Depends, HTTPException
 from pydantic import BaseModel
 from typing import List
 import re
+import datetime
 from sqlalchemy.orm import Session
 from database import engine, Base, get_db
-from models import Category, Domain
+from models import Category, Domain, History
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -42,6 +43,18 @@ class WhitelistVerification(BaseModel):
 class LimitVerification(BaseModel):
     initial_limit: float
     remaining_budget: float
+
+class HistoryItem(BaseModel):
+    id: int
+    user_task: str
+    active_account_category: str
+    transaction_amount: float
+    decision: str
+    timestamp: datetime.datetime
+
+    class Config:
+        orm_mode = True
+        from_attributes = True
 
 # Final strict Pydantic model for the response schema
 class InterceptResponse(BaseModel):
@@ -130,7 +143,7 @@ def intercept_action(request: InterceptRequest, db: Session = Depends(get_db)):
         limit_verify = LimitVerification(initial_limit=0.0, remaining_budget=0.0)
         context_verification.is_context_valid = False
         context_verification.context_reasoning = f"Category '{request.active_account_category}' not found in database."
-        return InterceptResponse(
+        response = InterceptResponse(
             decision="BLOCK",
             extracted_data=extracted_data,
             context_verification=context_verification,
@@ -138,55 +151,72 @@ def intercept_action(request: InterceptRequest, db: Session = Depends(get_db)):
             limit_verification=limit_verify,
             security_summary=f"Invalid category: {request.active_account_category}"
         )
+    else:
 
-    initial_limit = db_category.initial_limit
-    remaining_budget = db_category.remaining_budget
-    is_budget_sufficient = (remaining_budget - request.transaction_amount) >= 0
+        initial_limit = db_category.initial_limit
+        remaining_budget = db_category.remaining_budget
+        is_budget_sufficient = (remaining_budget - request.transaction_amount) >= 0
 
-    limit_verify = LimitVerification(initial_limit=initial_limit, remaining_budget=remaining_budget)
-    
-    context_verification.is_context_valid = True
-    context_verification.context_reasoning = f"Category '{request.active_account_category}' is recognized."
-
-    # Validate extracted domain against the database for the given category
-    approved_domains = [d.name for d in db_category.domains]
-    if extracted_domain in approved_domains:
-        whitelist_verification.is_domain_approved = True
-        whitelist_verification.whitelist_reasoning = f"Domain '{extracted_domain}' is approved for category '{request.active_account_category}'."
+        limit_verify = LimitVerification(initial_limit=initial_limit, remaining_budget=remaining_budget)
         
-        # Check budget limits
-        if not is_budget_sufficient:
-            return InterceptResponse(
+        context_verification.is_context_valid = True
+        context_verification.context_reasoning = f"Category '{request.active_account_category}' is recognized."
+
+        # Validate extracted domain against the database for the given category
+        approved_domains = [d.name for d in db_category.domains]
+        if extracted_domain in approved_domains:
+            whitelist_verification.is_domain_approved = True
+            whitelist_verification.whitelist_reasoning = f"Domain '{extracted_domain}' is approved for category '{request.active_account_category}'."
+            
+            # Check budget limits
+            if not is_budget_sufficient:
+                response = InterceptResponse(
+                    decision="BLOCK",
+                    extracted_data=extracted_data,
+                    context_verification=context_verification,
+                    whitelist_verification=whitelist_verification,
+                    limit_verification=limit_verify,
+                    security_summary=f"Transaction blocked: Insufficient budget. Cost is {request.transaction_amount} but only {remaining_budget} remaining."
+                )
+            else:
+                # Deduct budget
+                if request.transaction_amount > 0:
+                    db_category.remaining_budget -= request.transaction_amount
+                    db.commit()
+                    limit_verify.remaining_budget = db_category.remaining_budget
+                        
+                response = InterceptResponse(
+                    decision="ALLOW",
+                    extracted_data=extracted_data,
+                    context_verification=context_verification,
+                    whitelist_verification=whitelist_verification,
+                    limit_verification=limit_verify,
+                    security_summary="Transaction authorized. Domain and category are both approved."
+                )
+        else:
+            whitelist_verification.is_domain_approved = False
+            whitelist_verification.whitelist_reasoning = f"Domain '{extracted_domain}' is not approved for category '{request.active_account_category}'."
+            response = InterceptResponse(
                 decision="BLOCK",
                 extracted_data=extracted_data,
                 context_verification=context_verification,
                 whitelist_verification=whitelist_verification,
                 limit_verification=limit_verify,
-                security_summary=f"Transaction blocked: Insufficient budget. Cost is {request.transaction_amount} but only {remaining_budget} remaining."
+                security_summary=f"Domain {extracted_domain} is unapproved for category {request.active_account_category}."
             )
-            
-        # Deduct budget
-        if request.transaction_amount > 0:
-            db_category.remaining_budget -= request.transaction_amount
-            db.commit()
-            limit_verify.remaining_budget = db_category.remaining_budget
-                
-        return InterceptResponse(
-            decision="ALLOW",
-            extracted_data=extracted_data,
-            context_verification=context_verification,
-            whitelist_verification=whitelist_verification,
-            limit_verification=limit_verify,
-            security_summary="Transaction authorized. Domain and category are both approved."
-        )
-    else:
-        whitelist_verification.is_domain_approved = False
-        whitelist_verification.whitelist_reasoning = f"Domain '{extracted_domain}' is not approved for category '{request.active_account_category}'."
-        return InterceptResponse(
-            decision="BLOCK",
-            extracted_data=extracted_data,
-            context_verification=context_verification,
-            whitelist_verification=whitelist_verification,
-            limit_verification=limit_verify,
-            security_summary=f"Domain {extracted_domain} is unapproved for category {request.active_account_category}."
-        )
+
+    history_record = History(
+        user_task=request.user_task,
+        active_account_category=request.active_account_category,
+        transaction_amount=request.transaction_amount,
+        decision=response.decision,
+        timestamp=datetime.datetime.utcnow()
+    )
+    db.add(history_record)
+    db.commit()
+
+    return response
+
+@app.get("/api/v1/history", response_model=List[HistoryItem])
+def get_history(db: Session = Depends(get_db)):
+    return db.query(History).order_by(History.timestamp.desc()).all()
