@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Eye, EyeOff, CreditCard } from "lucide-react";
+import { Eye, EyeOff, CreditCard, Loader2 } from "lucide-react";
 import { GiSpartanHelmet } from "react-icons/gi";
 
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
+import { signup } from "../services/api";
 
 export const SignUpPage = () => {
   const navigate = useNavigate();
@@ -13,6 +14,8 @@ export const SignUpPage = () => {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [apiError, setApiError] = useState("");
 
   const validate = () => {
     const newErrors: { [key: string]: string } = {};
@@ -27,11 +30,19 @@ export const SignUpPage = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (validate()) {
-      console.log("Form submitted:", { fullName, email, password });
-      navigate("/dashboard");
+      setIsLoading(true);
+      setApiError("");
+      try {
+        await signup(email, password, fullName);
+        navigate("/dashboard");
+      } catch (err) {
+        setApiError(err instanceof Error ? err.message.includes("400") ? "Email already registered" : "Signup failed. Please try again." : "Signup failed");
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -52,7 +63,7 @@ export const SignUpPage = () => {
           />
         </div>
         {/* Bottom gradient so text is readable */}
-        <div className="absolute inset-0 z-[1] bg-gradient-to-t from-[#0b0e14] via-[#0b0e14]/60 to-transparent" />
+        <div className="absolute inset-0 z-1 bg-linear-to-t from-[#0b0e14] via-[#0b0e14]/60 to-transparent" />
 
         {/* Content */}
         <div className="relative z-10 flex flex-col h-full p-12">
@@ -72,7 +83,7 @@ export const SignUpPage = () => {
 
             <h2 className="text-4xl font-bold leading-tight mt-4">
               Control your spending with{" "}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue to-teal-400">
+              <span className="text-transparent bg-clip-text bg-linear-to-r from-blue to-teal-400">
                 AI-powered limits
               </span>
               .
@@ -171,8 +182,12 @@ export const SignUpPage = () => {
               {errors.password && <span className="text-red-500 text-xs">{errors.password}</span>}
             </div>
 
-            <Button type="submit" className="w-full mt-2" size="lg">
-              <CreditCard className="w-5 h-5 mr-2" />
+            {apiError && (
+              <p className="text-red-400 text-sm text-center bg-red-500/10 rounded-lg py-2 px-3">{apiError}</p>
+            )}
+
+            <Button type="submit" className="w-full mt-2" size="lg" disabled={isLoading}>
+              {isLoading ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <CreditCard className="w-5 h-5 mr-2" />}
               Create Account
             </Button>
 

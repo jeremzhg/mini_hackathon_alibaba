@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
     User,
     Shield,
@@ -11,6 +11,8 @@ import {
     RefreshCw,
     LogOut,
     Camera,
+    Loader2,
+    Check,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Input } from "./ui/Input";
@@ -18,6 +20,13 @@ import { Button } from "./ui/Button";
 import { Select } from "./ui/Select";
 import { Toggle } from "./ui/Toggle";
 import { PageHeader } from "./ui/PageHeader";
+import {
+    getProfile,
+    updateProfile,
+    changePassword,
+    regenerateApiKey,
+    type ProfileData,
+} from "../services/api";
 
 // ── Section Wrapper ────────────────────────────────────────────────────
 
@@ -48,22 +57,138 @@ const SettingsCard = ({
 
 export const SettingsSection = () => {
     const navigate = useNavigate();
-    const [name, setName] = useState("John Doe");
-    const [email, setEmail] = useState("johndoe@gmail.com");
+
+    // Profile state
+    const [name, setName] = useState("");
+    const [email, setEmail] = useState("");
     const [timezone, setTimezone] = useState("utc+7");
-    const [twoFaEnabled, setTwoFaEnabled] = useState(true);
+    const [twoFaEnabled, setTwoFaEnabled] = useState(false);
     const [sessionTimeout, setSessionTimeout] = useState("30");
     const [emailNotifs, setEmailNotifs] = useState(true);
     const [threatAlerts, setThreatAlerts] = useState(true);
     const [weeklyReport, setWeeklyReport] = useState(false);
     const [agentStatusAlerts, setAgentStatusAlerts] = useState(true);
+    const [apiKey, setApiKey] = useState("");
     const [showApiKey, setShowApiKey] = useState(false);
 
-    const apiKey = "ak_live_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6";
+    // UI state
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
+    const [saveSuccess, setSaveSuccess] = useState(false);
+    const [passwordModal, setPasswordModal] = useState(false);
+    const [currentPassword, setCurrentPassword] = useState("");
+    const [newPassword, setNewPassword] = useState("");
+    const [passwordError, setPasswordError] = useState("");
+    const [passwordSuccess, setPasswordSuccess] = useState("");
+    const [isChangingPassword, setIsChangingPassword] = useState(false);
+    const [isRegenerating, setIsRegenerating] = useState(false);
+    const [copied, setCopied] = useState(false);
+
+    const loadProfile = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const profile: ProfileData = await getProfile();
+            setName(profile.name);
+            setEmail(profile.email);
+            setTimezone(profile.timezone);
+            setTwoFaEnabled(profile.two_fa_enabled);
+            setSessionTimeout(profile.session_timeout.toString());
+            setEmailNotifs(profile.email_notifications);
+            setThreatAlerts(profile.threat_alerts);
+            setWeeklyReport(profile.weekly_report);
+            setAgentStatusAlerts(profile.agent_status_alerts);
+            setApiKey(profile.api_key);
+        } catch (err) {
+            console.error("Failed to load profile:", err);
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        loadProfile();
+    }, [loadProfile]);
+
+    const handleSave = async () => {
+        setIsSaving(true);
+        setSaveSuccess(false);
+        try {
+            await updateProfile({
+                name,
+                email,
+                timezone,
+                two_fa_enabled: twoFaEnabled,
+                session_timeout: parseInt(sessionTimeout),
+                email_notifications: emailNotifs,
+                threat_alerts: threatAlerts,
+                weekly_report: weeklyReport,
+                agent_status_alerts: agentStatusAlerts,
+            });
+            setSaveSuccess(true);
+            setTimeout(() => setSaveSuccess(false), 2000);
+        } catch (err) {
+            console.error("Failed to save profile:", err);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleChangePassword = async () => {
+        if (newPassword.length < 8) {
+            setPasswordError("New password must be at least 8 characters");
+            return;
+        }
+        setIsChangingPassword(true);
+        setPasswordError("");
+        setPasswordSuccess("");
+        try {
+            await changePassword(currentPassword, newPassword);
+            setPasswordSuccess("Password changed successfully!");
+            setCurrentPassword("");
+            setNewPassword("");
+            setTimeout(() => {
+                setPasswordModal(false);
+                setPasswordSuccess("");
+            }, 1500);
+        } catch (err) {
+            setPasswordError("Current password is incorrect");
+        } finally {
+            setIsChangingPassword(false);
+        }
+    };
+
+    const handleRegenerateKey = async () => {
+        setIsRegenerating(true);
+        try {
+            const result = await regenerateApiKey();
+            setApiKey(result.api_key);
+        } catch (err) {
+            console.error("Failed to regenerate API key:", err);
+        } finally {
+            setIsRegenerating(false);
+        }
+    };
+
+    const handleCopyKey = () => {
+        navigator.clipboard.writeText(apiKey);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+    };
 
     const handleLogout = () => {
         navigate("/login");
     };
+
+    if (isLoading) {
+        return (
+            <>
+                <PageHeader title="Settings" subtitle="Configure your account and credit card preferences." />
+                <div className="flex items-center justify-center py-20">
+                    <Loader2 className="w-8 h-8 text-blue animate-spin" />
+                </div>
+            </>
+        );
+    }
 
     return (
         <>
@@ -74,7 +199,7 @@ export const SettingsSection = () => {
                 <Button
                     variant="outline"
                     onClick={handleLogout}
-                    className="!border-red-500/30 !text-red-400 hover:!bg-red-500/10"
+                    className="border-red-500/30! text-red-400! hover:bg-red-500/10!"
                 >
                     <LogOut className="w-4 h-4 mr-2" />
                     Log Out
@@ -94,7 +219,7 @@ export const SettingsSection = () => {
                             <img
                                 className="w-20 h-20 rounded-full object-cover border-2 border-dark-border"
                                 alt="Profile picture"
-                                src="https://api.dicebear.com/7.x/avataaars/svg?seed=John"
+                                src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${name || "User"}`}
                             />
                             <button
                                 className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
@@ -131,9 +256,15 @@ export const SettingsSection = () => {
                         </Select>
                     </div>
                     <div className="flex justify-end">
-                        <Button>
-                            <Save className="w-4 h-4 mr-2" />
-                            Save Changes
+                        <Button onClick={handleSave} disabled={isSaving}>
+                            {isSaving ? (
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            ) : saveSuccess ? (
+                                <Check className="w-4 h-4 mr-2 text-emerald-400" />
+                            ) : (
+                                <Save className="w-4 h-4 mr-2" />
+                            )}
+                            {saveSuccess ? "Saved!" : "Save Changes"}
                         </Button>
                     </div>
                 </SettingsCard>
@@ -159,11 +290,40 @@ export const SettingsSection = () => {
                                 <option value="120">2 hours</option>
                             </Select>
                         </div>
-                        <Button variant="outline" className="w-fit">
+                        <Button variant="outline" className="w-fit" onClick={() => setPasswordModal(true)}>
                             Change Password
                         </Button>
                     </div>
                 </SettingsCard>
+
+                {/* Password Modal */}
+                {passwordModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setPasswordModal(false)} />
+                        <div className="relative w-full max-w-md p-6 bg-dark rounded-2xl border border-dark-border shadow-2xl flex flex-col gap-5">
+                            <h2 className="font-bold text-white text-lg">Change Password</h2>
+                            <div className="flex flex-col gap-4">
+                                <div className="flex flex-col gap-2">
+                                    <label className="text-sm font-medium text-white" htmlFor="current-pw">Current Password</label>
+                                    <Input id="current-pw" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
+                                </div>
+                                <div className="flex flex-col gap-2">
+                                    <label className="text-sm font-medium text-white" htmlFor="new-pw">New Password</label>
+                                    <Input id="new-pw" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="At least 8 characters" />
+                                </div>
+                                {passwordError && <p className="text-red-400 text-sm">{passwordError}</p>}
+                                {passwordSuccess && <p className="text-emerald-400 text-sm">{passwordSuccess}</p>}
+                            </div>
+                            <div className="flex items-center justify-end gap-3 pt-2">
+                                <Button variant="outline" onClick={() => setPasswordModal(false)}>Cancel</Button>
+                                <Button onClick={handleChangePassword} disabled={isChangingPassword || !currentPassword || !newPassword}>
+                                    {isChangingPassword ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                                    Change Password
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Notifications */}
                 <SettingsCard
@@ -191,7 +351,7 @@ export const SettingsSection = () => {
                             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                                 <div className="flex-1 flex items-center gap-3 px-4 h-12 bg-[#101622] rounded-lg border border-[#2d3648] font-mono text-sm text-slate overflow-hidden min-w-0">
                                     <span className="truncate">
-                                        {showApiKey ? apiKey : "•".repeat(apiKey.length)}
+                                        {showApiKey ? apiKey : "•".repeat(Math.min(apiKey.length, 30))}
                                     </span>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
@@ -203,17 +363,17 @@ export const SettingsSection = () => {
                                         {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                     </button>
                                     <button
-                                        onClick={() => navigator.clipboard.writeText(apiKey)}
+                                        onClick={handleCopyKey}
                                         className="p-3 rounded-lg border border-[#2d3648] text-slate hover:text-white hover:bg-[#2d3648] transition-colors cursor-pointer"
                                         aria-label="Copy API key"
                                     >
-                                        <Copy className="w-4 h-4" />
+                                        {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                                     </button>
                                 </div>
                             </div>
                         </div>
-                        <Button variant="outline" className="w-fit">
-                            <RefreshCw className="w-4 h-4 mr-2" />
+                        <Button variant="outline" className="w-fit" onClick={handleRegenerateKey} disabled={isRegenerating}>
+                            {isRegenerating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
                             Regenerate Key
                         </Button>
                     </div>

@@ -3,6 +3,7 @@
 A functional FastAPI mock backend designed to act as middleware. It prevents autonomous AI agents from making unauthorized financial transactions by validating domains against a provided whitelist based on the active account category.
 
 ## Features
+
 - Validates the `active_account_category` against the provided whitelist (loaded dynamically from `category/*.txt` files).
 - Tracks spending budgets dynamically stored in `limit/` and `current/` directories.
 - Extracts a domain/URL from a natural language `user_task` using regex.
@@ -11,27 +12,32 @@ A functional FastAPI mock backend designed to act as middleware. It prevents aut
 
 ## Setup
 
-1. **Install dependencies**:
+1. **Install dependencies** (requires [uv](https://docs.astral.sh/uv/)):
+
    ```bash
-   pip install -r requirements.txt
-   pip install sqlalchemy psycopg2-binary
+   cd athena_backend
+   uv sync
    ```
 
 2. **Database Configuration**:
    The backend uses a PostgreSQL database. Set the `DATABASE_URL` environment variable if your database is not local:
-   *Linux/Mac*:
+   _Linux/Mac_:
+
    ```bash
    export DATABASE_URL="postgresql://user:password@localhost:5432/dbname"
    ```
-   *Windows (PowerShell)*:
+
+   _Windows (PowerShell)_:
+
    ```powershell
    $env:DATABASE_URL="postgresql://user:password@localhost:5432/dbname"
    ```
+
    By default, it will attempt to connect to: `postgresql://postgres:postgres@localhost:5432/postgres`
 
 3. **Run the server**:
    ```bash
-   uvicorn main:app --reload
+   uv run uvicorn main:app --reload
    ```
    The backend will automatically generate the required database tables upon startup!
 
@@ -43,7 +49,7 @@ You can populate these tables directly or utilize the exposed `/api/v1/categorie
 
 ## How to Use
 
-You can test the API by sending a `POST` request to `/api/v1/intercept`. 
+You can test the API by sending a `POST` request to `/api/v1/intercept`.
 
 You can use the interactive Swagger UI by navigating to `http://127.0.0.1:8000/docs` in your browser.
 
@@ -55,15 +61,12 @@ Send a `POST` request to `/api/v1/categories` to create a new category and give 
 2. URL: `http://127.0.0.1:8000/api/v1/categories`
 
 **Request Body**:
+
 ```json
 {
   "name": "cloud",
-  "limit": 5000.00,
-  "domains": [
-    "aws.amazon.com",
-    "azure.com",
-    "cloud.google.com"
-  ]
+  "limit": 5000.0,
+  "domains": ["aws.amazon.com", "azure.com", "cloud.google.com"]
 }
 ```
 
@@ -77,11 +80,10 @@ To change the domains for an existing category, send a `PUT` request with the co
 2. URL: `http://127.0.0.1:8000/api/v1/categories/cloud`
 
 **Request Body**:
+
 ```json
 {
-  "domains": [
-    "aws.amazon.com"
-  ]
+  "domains": ["aws.amazon.com"]
 }
 ```
 
@@ -93,15 +95,17 @@ Here is a sample request simulating an authorized Cloud transaction, attempting 
 2. URL: `http://127.0.0.1:8000/api/v1/intercept`
 
 **Request Body**:
+
 ```json
 {
   "user_task": "Pay for the new database servers at aws.amazon.com immediately.",
   "active_account_category": "cloud",
-  "transaction_amount": 1000.00
+  "transaction_amount": 1000.0
 }
 ```
 
 **Expected Response**:
+
 ```json
 {
   "decision": "ALLOW",
@@ -131,20 +135,23 @@ Here is a sample request simulating an authorized Cloud transaction, attempting 
 If the AI tries to buy groceries using the Cloud account budget:
 
 **Postman Setup**:
+
 1. Method: `POST`
 2. URL: `http://127.0.0.1:8000/api/v1/intercept`
 3. Body tab -> raw -> JSON
 
 **Request Body**:
+
 ```json
 {
   "user_task": "Order 50 apples from walmart.com",
   "active_account_category": "cloud",
-  "transaction_amount": 25.00
+  "transaction_amount": 25.0
 }
 ```
 
 **Expected Response**:
+
 ```json
 {
   "decision": "BLOCK",
@@ -177,6 +184,7 @@ To retrieve all previously executed interception decisions, send a `GET` request
 2. URL: `http://127.0.0.1:8000/api/v1/history`
 
 **Expected Response**:
+
 ```json
 [
   {

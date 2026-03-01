@@ -16,7 +16,7 @@ import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import { PageHeader } from "./ui/PageHeader";
-import { getCategories, createCategory, type ApiCategory } from "../services/api";
+import { getCategories, createCategory, deleteCategory, patchCategory, type ApiCategory } from "../services/api";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -249,17 +249,32 @@ export const CategoriesSection = () => {
         }
     };
 
-    const handleEdit = (name: string, limit: number) => {
+    const handleEdit = async (name: string, limit: number) => {
         if (!editTarget) return;
-        setCategories(categories.map((c) =>
-            c.id === editTarget.id ? { ...c, name, limit } : c
-        ));
-        setModalMode(null);
-        setEditTarget(undefined);
+        setIsSaving(true);
+        try {
+            await patchCategory(editTarget.name, { name, limit });
+            await fetchCategories();
+            setModalMode(null);
+            setEditTarget(undefined);
+        } catch (err) {
+            console.error("Failed to edit category:", err);
+        } finally {
+            setIsSaving(false);
+        }
     };
 
-    const handleDelete = (id: string) => {
+    const handleDelete = async (id: string) => {
+        const cat = categories.find((c) => c.id === id);
+        if (!cat) return;
+        // Optimistic removal
         setCategories(categories.filter((c) => c.id !== id));
+        try {
+            await deleteCategory(cat.name);
+        } catch (err) {
+            console.error("Failed to delete category:", err);
+            await fetchCategories(); // Revert on failure
+        }
     };
 
     const handleToggle = (id: string) => {

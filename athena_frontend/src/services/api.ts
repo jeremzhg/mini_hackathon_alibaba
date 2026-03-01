@@ -221,3 +221,113 @@ export async function getDashboardData(): Promise<DashboardData> {
 
     return { stats, chartData };
 }
+
+// ── Auth endpoints ─────────────────────────────────────────────────────
+
+export interface AuthResponse {
+    status: string;
+    user_id: number;
+    email: string;
+    name: string;
+    message: string;
+}
+
+export async function login(
+    email: string,
+    password: string
+): Promise<AuthResponse> {
+    return apiClient<AuthResponse>("/v1/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+    });
+}
+
+export async function signup(
+    email: string,
+    password: string,
+    name: string = ""
+): Promise<AuthResponse> {
+    return apiClient<AuthResponse>("/v1/auth/signup", {
+        method: "POST",
+        body: JSON.stringify({ email, password, name }),
+    });
+}
+
+// ── Category delete/patch ──────────────────────────────────────────────
+
+export async function deleteCategory(
+    categoryName: string
+): Promise<{ status: string; message: string }> {
+    return apiClient(`/v1/categories/${encodeURIComponent(categoryName)}`, {
+        method: "DELETE",
+    });
+}
+
+export async function patchCategory(
+    categoryName: string,
+    updates: { name?: string; limit?: number }
+): Promise<{
+    status: string;
+    category: string;
+    initial_limit: number;
+    remaining_budget: number;
+    message: string;
+}> {
+    return apiClient(
+        `/v1/categories/${encodeURIComponent(categoryName)}`,
+        {
+            method: "PATCH",
+            body: JSON.stringify(updates),
+        }
+    );
+}
+
+// ── Settings endpoints ─────────────────────────────────────────────────
+
+export interface ProfileData {
+    name: string;
+    email: string;
+    timezone: string;
+    two_fa_enabled: boolean;
+    session_timeout: number;
+    email_notifications: boolean;
+    threat_alerts: boolean;
+    weekly_report: boolean;
+    agent_status_alerts: boolean;
+    api_key: string;
+}
+
+export async function getProfile(): Promise<ProfileData> {
+    return apiClient<ProfileData>("/v1/settings/profile");
+}
+
+export async function updateProfile(
+    updates: Partial<Omit<ProfileData, "api_key">>
+): Promise<{ status: string; message: string }> {
+    return apiClient("/v1/settings/profile", {
+        method: "PUT",
+        body: JSON.stringify(updates),
+    });
+}
+
+export async function changePassword(
+    currentPassword: string,
+    newPassword: string
+): Promise<{ status: string; message: string }> {
+    return apiClient("/v1/settings/password", {
+        method: "PUT",
+        body: JSON.stringify({
+            current_password: currentPassword,
+            new_password: newPassword,
+        }),
+    });
+}
+
+export async function regenerateApiKey(): Promise<{
+    status: string;
+    api_key: string;
+}> {
+    return apiClient("/v1/settings/api-key/regenerate", {
+        method: "POST",
+    });
+}

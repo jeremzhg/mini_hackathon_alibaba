@@ -1,20 +1,30 @@
 import { useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { GiSpartanHelmet } from "react-icons/gi";
 import { useNavigate, Link } from "react-router-dom";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
-
+import { login } from "../services/api";
 export const LoginPage = () => {
     const navigate = useNavigate();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState("");
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        console.log("Sign in with:", { email, password });
-        navigate("/dashboard");
+        setIsLoading(true);
+        setError("");
+        try {
+            await login(email, password);
+            navigate("/dashboard");
+        } catch (err) {
+            setError(err instanceof Error ? err.message.includes("401") ? "Invalid email or password" : "Login failed. Please try again." : "Login failed");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleGoogleSignIn = () => {
@@ -34,7 +44,7 @@ export const LoginPage = () => {
                     />
                 </div>
                 {/* Bottom gradient so text is readable */}
-                <div className="absolute inset-0 z-[1] bg-gradient-to-t from-[#0b0e14] via-[#0b0e14]/60 to-transparent" />
+                <div className="absolute inset-0 z-1 bg-linear-to-t from-[#0b0e14] via-[#0b0e14]/60 to-transparent" />
 
                 <div className="relative z-10 flex flex-col h-full p-12">
                     <header className="mb-auto flex items-center gap-2">
@@ -53,7 +63,7 @@ export const LoginPage = () => {
 
                         <h2 className="text-4xl font-bold leading-tight mt-4">
                             Welcome back to{" "}
-                            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue to-teal-400">
+                            <span className="text-transparent bg-clip-text bg-linear-to-r from-blue to-teal-400">
                                 Athena
                             </span>
                             .
@@ -133,7 +143,12 @@ export const LoginPage = () => {
                             </div>
                         </div>
 
-                        <Button type="submit" className="w-full mt-2" size="lg">
+                        {error && (
+                            <p className="text-red-400 text-sm text-center bg-red-500/10 rounded-lg py-2 px-3">{error}</p>
+                        )}
+
+                        <Button type="submit" className="w-full mt-2" size="lg" disabled={isLoading}>
+                            {isLoading ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : null}
                             Sign In
                         </Button>
 
