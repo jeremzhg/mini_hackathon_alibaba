@@ -168,3 +168,24 @@ If the AI tries to buy groceries using the Cloud account budget:
   "security_summary": "Domain walmart.com is unapproved for category cloud."
 }
 ```
+
+### View History
+
+To retrieve all previously executed interception decisions, send a `GET` request to the `/api/v1/history` endpoint. The records will be returned sorted from newest to oldest.
+
+1. Method: `GET`
+2. URL: `http://127.0.0.1:8000/api/v1/history`
+
+**Expected Response**:
+```json
+[
+  {
+    "id": 1,
+    "user_task": "Pay for the new database servers at aws.amazon.com immediately.",
+    "active_account_category": "cloud",
+    "transaction_amount": 1000.0,
+    "decision": "ALLOW",
+    "timestamp": "2023-10-27T10:00:00.000000"
+  }
+]
+```
