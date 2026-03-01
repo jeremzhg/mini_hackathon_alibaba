@@ -1,13 +1,59 @@
 /**
  * API service layer for the Athena frontend.
  * Provides typed fetch wrappers for all backend endpoints.
- * Currently uses dummy data via Promise.resolve() since no backend exists,
- * but the HTTP request structure is ready to swap in.
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
+const API_BASE_URL =
+    import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
 
-// ── Types ──────────────────────────────────────────────────────────────
+// ── Backend Types ──────────────────────────────────────────────────────
+
+export interface ApiCategory {
+    id: number;
+    name: string;
+    initial_limit: number;
+    remaining_budget: number;
+    domains: string[];
+}
+
+export interface ApiHistoryItem {
+    id: number;
+    user_task: string;
+    active_account_category: string;
+    transaction_amount: number;
+    decision: "ALLOW" | "BLOCK";
+    timestamp: string;
+}
+
+export interface InterceptRequest {
+    user_task: string;
+    active_account_category: string;
+    transaction_amount: number;
+}
+
+export interface InterceptResponse {
+    decision: "ALLOW" | "BLOCK";
+    extracted_data: {
+        target_domain: string;
+        purchase_nature: string;
+    };
+    context_verification: {
+        account_category: string;
+        is_context_valid: boolean;
+        context_reasoning: string;
+    };
+    whitelist_verification: {
+        is_domain_approved: boolean;
+        whitelist_reasoning: string;
+    };
+    limit_verification: {
+        initial_limit: number;
+        remaining_budget: number;
+    };
+    security_summary: string;
+}
+
+// ── Dashboard UI Types (derived from API data) ─────────────────────────
 
 export interface DashboardStat {
     id: string;
@@ -19,17 +65,6 @@ export interface DashboardStat {
     trend?: "up" | "down" | "neutral";
 }
 
-export interface Interception {
-    id: string;
-    timestamp: string;
-    time: string;
-    agentId: string;
-    agentColor: string;
-    targetDomain: string;
-    category: string;
-    status: "ALLOW" | "BLOCK";
-}
-
 export interface ChartDataPoint {
     time: string;
     allowed: number;
@@ -38,213 +73,151 @@ export interface ChartDataPoint {
 
 export interface DashboardData {
     stats: DashboardStat[];
-    interceptions: Interception[];
     chartData: ChartDataPoint[];
 }
 
 // ── Generic fetch wrapper ──────────────────────────────────────────────
 
-async function apiClient<T>(endpoint: string, options?: RequestInit): Promise<T> {
+async function apiClient<T>(
+    endpoint: string,
+    options?: RequestInit
+): Promise<T> {
     const url = `${API_BASE_URL}${endpoint}`;
 
-    try {
-        const response = await fetch(url, {
-            headers: {
-                "Content-Type": "application/json",
-                ...options?.headers,
-            },
-            ...options,
-        });
+    const response = await fetch(url, {
+        headers: {
+            "Content-Type": "application/json",
+            ...options?.headers,
+        },
+        ...options,
+    });
 
-        if (!response.ok) {
-            throw new Error(`API error: ${response.status} ${response.statusText}`);
-        }
-
-        return response.json() as Promise<T>;
-    } catch (error) {
-        // In development with no backend, fall back to dummy data
-        console.warn(`API call to ${endpoint} failed, using fallback data:`, error);
-        throw error;
+    if (!response.ok) {
+        const errorBody = await response.text().catch(() => "");
+        throw new Error(
+            `API error: ${response.status} ${response.statusText}${errorBody ? ` — ${errorBody}` : ""}`
+        );
     }
+
+    return response.json() as Promise<T>;
 }
 
-// ── Dummy data ─────────────────────────────────────────────────────────
+// ── Category endpoints ─────────────────────────────────────────────────
 
-const DUMMY_STATS: DashboardStat[] = [
-    {
-        id: "monthly-spend",
-        title: "Monthly Spend",
-        value: "$12,474.99",
-        subtitle: "+8% vs last month",
-        subtitleColor: "red",
-        iconType: "server",
-        trend: "up",
-    },
-    {
-        id: "transactions-scanned",
-        title: "Transactions Scanned (24h)",
-        value: "1,492",
-        subtitle: "+12% vs yesterday",
-        subtitleColor: "emerald",
-        iconType: "search",
-        trend: "up",
-    },
-    {
-        id: "blocked-transactions",
-        title: "Blocked Transactions",
-        value: "18",
-        subtitle: "Over limit or unauthorized",
-        subtitleColor: "red",
-        iconType: "shield",
-    },
-    {
-        id: "active-categories",
-        title: "Active Categories",
-        value: "5",
-        subtitle: "Budget tracking active",
-        subtitleColor: "slate",
-        iconType: "bot",
-    },
-];
+export async function getCategories(): Promise<ApiCategory[]> {
+    return apiClient<ApiCategory[]>("/v1/categories");
+}
 
-const DUMMY_INTERCEPTIONS: Interception[] = [
-    {
-        id: "1",
-        timestamp: "2023-10-27",
-        time: "10:45:00",
-        agentId: "Agent-Alpha",
-        agentColor: "bg-[#60a5fa]",
-        targetDomain: "stripe.com",
-        category: "Payment",
-        status: "ALLOW",
-    },
-    {
-        id: "2",
-        timestamp: "2023-10-27",
-        time: "10:42:15",
-        agentId: "Agent-Beta",
-        agentColor: "bg-purple-400",
-        targetDomain: "suspicious-site.xyz",
-        category: "Phishing",
-        status: "BLOCK",
-    },
-    {
-        id: "3",
-        timestamp: "2023-10-27",
-        time: "10:30:22",
-        agentId: "Agent-Alpha",
-        agentColor: "bg-[#60a5fa]",
-        targetDomain: "aws.amazon.com",
-        category: "Infrastructure",
-        status: "ALLOW",
-    },
-    {
-        id: "4",
-        timestamp: "2023-10-27",
-        time: "10:15:00",
-        agentId: "Agent-Gamma",
-        agentColor: "bg-yellow-400",
-        targetDomain: "unknown-api.io",
-        category: "Data Exfil",
-        status: "BLOCK",
-    },
-    {
-        id: "5",
-        timestamp: "2023-10-27",
-        time: "09:58:33",
-        agentId: "Agent-Alpha",
-        agentColor: "bg-[#60a5fa]",
-        targetDomain: "github.com",
-        category: "Development",
-        status: "ALLOW",
-    },
-    {
-        id: "6",
-        timestamp: "2023-10-27",
-        time: "09:45:12",
-        agentId: "Agent-Beta",
-        agentColor: "bg-purple-400",
-        targetDomain: "malware-c2.net",
-        category: "Malware",
-        status: "BLOCK",
-    },
-    {
-        id: "7",
-        timestamp: "2023-10-26",
-        time: "23:12:44",
-        agentId: "Agent-Gamma",
-        agentColor: "bg-yellow-400",
-        targetDomain: "slack.com",
-        category: "Communication",
-        status: "ALLOW",
-    },
-    {
-        id: "8",
-        timestamp: "2023-10-26",
-        time: "22:01:09",
-        agentId: "Agent-Alpha",
-        agentColor: "bg-[#60a5fa]",
-        targetDomain: "crypto-drain.xyz",
-        category: "Fraud",
-        status: "BLOCK",
-    },
-];
+export async function createCategory(
+    name: string,
+    limit: number,
+    domains: string[] = []
+): Promise<{ status: string; category: string; limit: number; message: string }> {
+    return apiClient("/v1/categories", {
+        method: "POST",
+        body: JSON.stringify({ name, limit, domains }),
+    });
+}
 
-const DUMMY_CHART_DATA: ChartDataPoint[] = [
-    { time: "00:00", allowed: 45, blocked: 8 },
-    { time: "02:00", allowed: 32, blocked: 5 },
-    { time: "04:00", allowed: 28, blocked: 3 },
-    { time: "06:00", allowed: 52, blocked: 7 },
-    { time: "08:00", allowed: 95, blocked: 12 },
-    { time: "10:00", allowed: 128, blocked: 18 },
-    { time: "12:00", allowed: 142, blocked: 15 },
-    { time: "14:00", allowed: 118, blocked: 22 },
-    { time: "16:00", allowed: 135, blocked: 14 },
-    { time: "18:00", allowed: 98, blocked: 10 },
-    { time: "20:00", allowed: 72, blocked: 6 },
-    { time: "22:00", allowed: 55, blocked: 4 },
-    { time: "23:59", allowed: 48, blocked: 3 },
-];
+export async function updateCategoryDomains(
+    categoryName: string,
+    domains: string[]
+): Promise<{ status: string; category: string; message: string }> {
+    return apiClient(`/v1/categories/${encodeURIComponent(categoryName)}`, {
+        method: "PUT",
+        body: JSON.stringify({ domains }),
+    });
+}
 
-// ── API functions ──────────────────────────────────────────────────────
+// ── Intercept endpoint ─────────────────────────────────────────────────
+
+export async function postIntercept(
+    request: InterceptRequest
+): Promise<InterceptResponse> {
+    return apiClient<InterceptResponse>("/v1/intercept", {
+        method: "POST",
+        body: JSON.stringify(request),
+    });
+}
+
+// ── History endpoint ───────────────────────────────────────────────────
+
+export async function getHistory(): Promise<ApiHistoryItem[]> {
+    return apiClient<ApiHistoryItem[]>("/v1/history");
+}
+
+// ── Dashboard data (derived from real endpoints) ───────────────────────
 
 export async function getDashboardData(): Promise<DashboardData> {
-    try {
-        return await apiClient<DashboardData>("/dashboard");
-    } catch {
-        // Simulate a network delay for realistic loading states
-        await new Promise((resolve) => setTimeout(resolve, 600));
-        return {
-            stats: DUMMY_STATS,
-            interceptions: DUMMY_INTERCEPTIONS,
-            chartData: DUMMY_CHART_DATA,
-        };
-    }
-}
+    const [categories, history] = await Promise.all([
+        getCategories(),
+        getHistory(),
+    ]);
 
-export async function getDashboardStats(): Promise<DashboardStat[]> {
-    try {
-        return await apiClient<DashboardStat[]>("/dashboard/stats");
-    } catch {
-        await new Promise((resolve) => setTimeout(resolve, 400));
-        return DUMMY_STATS;
-    }
-}
+    // Compute stats from real data
+    const totalSpent = categories.reduce(
+        (sum, c) => sum + (c.initial_limit - c.remaining_budget),
+        0
+    );
+    const totalTransactions = history.length;
+    const blockedCount = history.filter((h) => h.decision === "BLOCK").length;
+    const activeCategories = categories.length;
 
-export async function getInterceptions(): Promise<Interception[]> {
-    try {
-        return await apiClient<Interception[]>("/dashboard/interceptions");
-    } catch {
-        await new Promise((resolve) => setTimeout(resolve, 400));
-        return DUMMY_INTERCEPTIONS;
-    }
-}
+    const stats: DashboardStat[] = [
+        {
+            id: "monthly-spend",
+            title: "Monthly Spend",
+            value: `$${totalSpent.toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
+            subtitle: `Across ${activeCategories} categories`,
+            subtitleColor: totalSpent > 0 ? "red" : "slate",
+            iconType: "server",
+        },
+        {
+            id: "transactions-scanned",
+            title: "Transactions Scanned",
+            value: totalTransactions.toLocaleString(),
+            subtitle: `${totalTransactions} total intercepts`,
+            subtitleColor: "emerald",
+            iconType: "search",
+        },
+        {
+            id: "blocked-transactions",
+            title: "Blocked Transactions",
+            value: blockedCount.toString(),
+            subtitle: "Over limit or unauthorized",
+            subtitleColor: blockedCount > 0 ? "red" : "slate",
+            iconType: "shield",
+        },
+        {
+            id: "active-categories",
+            title: "Active Categories",
+            value: activeCategories.toString(),
+            subtitle: "Budget tracking active",
+            subtitleColor: "slate",
+            iconType: "bot",
+        },
+    ];
 
-export async function getChartData(): Promise<ChartDataPoint[]> {
-    try {
-        return await apiClient<ChartDataPoint[]>("/dashboard/chart");
-    } catch {
-        await new Promise((resolve) => setTimeout(resolve, 300));
-        return DUMMY_CHART_DATA;
+    // Build chart data — group history by hour
+    const hourBuckets: Record<string, { allowed: number; blocked: number }> = {};
+    for (let h = 0; h < 24; h += 2) {
+        const label = `${h.toString().padStart(2, "0")}:00`;
+        hourBuckets[label] = { allowed: 0, blocked: 0 };
     }
+
+    for (const item of history) {
+        const date = new Date(item.timestamp);
+        const hourSlot = Math.floor(date.getHours() / 2) * 2;
+        const label = `${hourSlot.toString().padStart(2, "0")}:00`;
+        if (hourBuckets[label]) {
+            if (item.decision === "ALLOW") hourBuckets[label].allowed++;
+            else hourBuckets[label].blocked++;
+        }
+    }
+
+    const chartData: ChartDataPoint[] = Object.entries(hourBuckets).map(
+        ([time, counts]) => ({ time, ...counts })
+    );
+
+    return { stats, chartData };
 }

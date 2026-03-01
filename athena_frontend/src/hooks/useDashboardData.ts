@@ -1,24 +1,43 @@
 import { useState, useEffect, useCallback } from "react";
 import {
     getDashboardData,
+    getHistory,
     type DashboardStat,
-    type Interception,
     type ChartDataPoint,
+    type ApiHistoryItem,
 } from "../services/api";
+import type { Transaction } from "../data/transactions";
 
 interface UseDashboardDataReturn {
     stats: DashboardStat[];
-    interceptions: Interception[];
     chartData: ChartDataPoint[];
+    transactions: Transaction[];
     isLoading: boolean;
     error: string | null;
     refetch: () => void;
 }
 
+/** Map a backend history item to the UI Transaction type. */
+function historyToTransaction(item: ApiHistoryItem): Transaction {
+    const isBlocked = item.decision === "BLOCK";
+    return {
+        id: `TXN-${item.id.toString().padStart(3, "0")}`,
+        timestamp: item.timestamp.split("T")[0],
+        time: item.timestamp.split("T")[1]?.slice(0, 8) ?? "",
+        type: "outbound",
+        description: item.user_task.length > 50 ? item.user_task.slice(0, 50) + "…" : item.user_task,
+        category: item.active_account_category,
+        categoryColor: "bg-[#60a5fa]",
+        amount: `-$${item.transaction_amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
+        currency: "USD",
+        status: isBlocked ? "Blocked" : "Allowed",
+    };
+}
+
 export function useDashboardData(): UseDashboardDataReturn {
     const [stats, setStats] = useState<DashboardStat[]>([]);
-    const [interceptions, setInterceptions] = useState<Interception[]>([]);
     const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
+    const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -27,12 +46,17 @@ export function useDashboardData(): UseDashboardDataReturn {
         setError(null);
 
         try {
-            const data = await getDashboardData();
-            setStats(data.stats);
-            setInterceptions(data.interceptions);
-            setChartData(data.chartData);
+            const [dashData, history] = await Promise.all([
+                getDashboardData(),
+                getHistory(),
+            ]);
+            setStats(dashData.stats);
+            setChartData(dashData.chartData);
+            setTransactions(history.map(historyToTransaction));
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to load dashboard data");
+            setError(
+                err instanceof Error ? err.message : "Failed to load dashboard data"
+            );
         } finally {
             setIsLoading(false);
         }
@@ -42,5 +66,5 @@ export function useDashboardData(): UseDashboardDataReturn {
         fetchData();
     }, [fetchData]);
 
-    return { stats, interceptions, chartData, isLoading, error, refetch: fetchData };
+    return { stats, chartData, transactions, isLoading, error, refetch: fetchData };
 }

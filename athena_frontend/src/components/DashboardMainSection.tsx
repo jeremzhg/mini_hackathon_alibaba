@@ -22,7 +22,6 @@ import { useDashboardData } from "../hooks/useDashboardData";
 import type { DashboardStat } from "../services/api";
 import { PageHeader } from "./ui/PageHeader";
 import { TransactionTable } from "./TransactionTable";
-import { TRANSACTIONS } from "../data/transactions";
 
 // ── Icon resolver ──────────────────────────────────────────────────────
 
@@ -113,7 +112,7 @@ const LoadingSkeleton = () => (
 // ── Main Component ─────────────────────────────────────────────────────
 
 export const DashboardMainSection = () => {
-  const { stats, chartData, isLoading, error, refetch } = useDashboardData();
+  const { stats, chartData, transactions, isLoading, error, refetch } = useDashboardData();
 
   if (isLoading) {
     return (
@@ -238,7 +237,7 @@ export const DashboardMainSection = () => {
       {/* Recent Transactions (shared component) */}
       <div className="pb-8">
         <TransactionTable
-          data={TRANSACTIONS}
+          data={transactions}
           title="Recent Transactions"
           defaultPerPage={5}
           showStatusFilter

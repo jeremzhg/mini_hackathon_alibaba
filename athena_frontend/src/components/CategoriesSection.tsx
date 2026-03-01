@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
     Tag,
     Plus,
@@ -10,11 +10,13 @@ import {
     X,
     Power,
     PowerOff,
+    Loader2,
 } from "lucide-react";
 import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import { PageHeader } from "./ui/PageHeader";
+import { getCategories, createCategory, type ApiCategory } from "../services/api";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -27,52 +29,19 @@ interface Category {
     color: string;
 }
 
-// ── Dummy Data ──────────────────────────────────────────────────────────
-
-const INITIAL_CATEGORIES: Category[] = [
-    {
-        id: "cat-cloud",
-        name: "Cloud Services",
-        limit: 5000,
-        spent: 4090,
-        status: "Active",
-        color: "bg-[#60a5fa]",
-    },
-    {
-        id: "cat-software",
-        name: "Software Licenses",
-        limit: 2000,
-        spent: 344,
-        status: "Active",
-        color: "bg-purple-400",
-    },
-    {
-        id: "cat-payment",
-        name: "Payment Fees",
-        limit: 500,
-        spent: 89.99,
-        status: "Active",
-        color: "bg-emerald-400",
-    },
-    {
-        id: "cat-marketing",
-        name: "Marketing",
-        limit: 3000,
-        spent: 1250,
-        status: "Active",
-        color: "bg-pink-400",
-    },
-    {
-        id: "cat-uncategorized",
-        name: "Uncategorized",
-        limit: 1000,
-        spent: 0,
-        status: "Inactive",
-        color: "bg-yellow-400",
-    },
-];
-
 const COLORS = ["bg-[#60a5fa]", "bg-purple-400", "bg-emerald-400", "bg-pink-400", "bg-yellow-400", "bg-orange-400", "bg-cyan-400"];
+
+/** Map an API category to the UI category shape. */
+function apiToCategory(cat: ApiCategory, index: number): Category {
+    return {
+        id: `cat-${cat.id}`,
+        name: cat.name,
+        limit: cat.initial_limit,
+        spent: cat.initial_limit - cat.remaining_budget,
+        status: "Active",
+        color: COLORS[index % COLORS.length],
+    };
+}
 
 // ── Category Card ──────────────────────────────────────────────────────
 
@@ -174,11 +143,13 @@ const CategoryModal = ({
     initial,
     onSave,
     onClose,
+    isSaving,
 }: {
     mode: "add" | "edit";
     initial?: Category;
     onSave: (name: string, limit: number) => void;
     onClose: () => void;
+    isSaving?: boolean;
 }) => {
     const [name, setName] = useState(initial?.name ?? "");
     const [limit, setLimit] = useState(initial?.limit?.toString() ?? "");
@@ -225,8 +196,10 @@ const CategoryModal = ({
                 </div>
                 <div className="flex items-center justify-end gap-3 pt-2">
                     <Button variant="outline" onClick={onClose}>Cancel</Button>
-                    <Button onClick={handleSave} disabled={!name.trim() || !limit || parseFloat(limit) <= 0}>
-                        {mode === "add" ? (
+                    <Button onClick={handleSave} disabled={!name.trim() || !limit || parseFloat(limit) <= 0 || isSaving}>
+                        {isSaving ? (
+                            <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving…</>
+                        ) : mode === "add" ? (
                             <><Plus className="w-4 h-4 mr-2" />Add Category</>
                         ) : (
                             "Save Changes"
@@ -241,21 +214,39 @@ const CategoryModal = ({
 // ── Main Component ──────────────────────────────────────────────────────
 
 export const CategoriesSection = () => {
-    const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
+    const [categories, setCategories] = useState<Category[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
     const [modalMode, setModalMode] = useState<"add" | "edit" | null>(null);
     const [editTarget, setEditTarget] = useState<Category | undefined>();
 
-    const handleAdd = (name: string, limit: number) => {
-        const newCat: Category = {
-            id: `cat-${Date.now()}`,
-            name,
-            limit,
-            spent: 0,
-            status: "Active",
-            color: COLORS[categories.length % COLORS.length],
-        };
-        setCategories([...categories, newCat]);
-        setModalMode(null);
+    const fetchCategories = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const data = await getCategories();
+            setCategories(data.map(apiToCategory));
+        } catch (err) {
+            console.error("Failed to load categories:", err);
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchCategories();
+    }, [fetchCategories]);
+
+    const handleAdd = async (name: string, limit: number) => {
+        setIsSaving(true);
+        try {
+            await createCategory(name, limit);
+            await fetchCategories();
+            setModalMode(null);
+        } catch (err) {
+            console.error("Failed to create category:", err);
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const handleEdit = (name: string, limit: number) => {
@@ -305,56 +296,74 @@ export const CategoriesSection = () => {
                     initial={editTarget}
                     onSave={modalMode === "add" ? handleAdd : handleEdit}
                     onClose={() => { setModalMode(null); setEditTarget(undefined); }}
+                    isSaving={isSaving}
                 />
             )}
 
-            {/* Summary Stats */}
-            <div className="flex flex-wrap gap-4">
-                <div className="flex-1 min-w-[180px] flex items-center gap-3 p-4 bg-darkish-grey rounded-xl border border-dark-border">
-                    <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-emerald-500/10">
-                        <Tag className="w-5 h-5 text-emerald-400" />
-                    </div>
-                    <div className="flex flex-col">
-                        <span className="text-slate text-xs">Active Categories</span>
-                        <span className="text-white font-bold text-xl">{activeCount}</span>
-                    </div>
+            {/* Loading State */}
+            {isLoading ? (
+                <div className="flex items-center justify-center py-20">
+                    <Loader2 className="w-8 h-8 text-blue animate-spin" />
                 </div>
-                <div className="flex-1 min-w-[180px] flex items-center gap-3 p-4 bg-darkish-grey rounded-xl border border-dark-border">
-                    <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-blue/10">
-                        <Wallet className="w-5 h-5 text-blue" />
+            ) : (
+                <>
+                    {/* Summary Stats */}
+                    <div className="flex flex-wrap gap-4">
+                        <div className="flex-1 min-w-[180px] flex items-center gap-3 p-4 bg-darkish-grey rounded-xl border border-dark-border">
+                            <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-emerald-500/10">
+                                <Tag className="w-5 h-5 text-emerald-400" />
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="text-slate text-xs">Active Categories</span>
+                                <span className="text-white font-bold text-xl">{activeCount}</span>
+                            </div>
+                        </div>
+                        <div className="flex-1 min-w-[180px] flex items-center gap-3 p-4 bg-darkish-grey rounded-xl border border-dark-border">
+                            <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-blue/10">
+                                <Wallet className="w-5 h-5 text-blue" />
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="text-slate text-xs">Total Budget</span>
+                                <span className="text-white font-bold text-xl">
+                                    ${totalBudget.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                                </span>
+                            </div>
+                        </div>
+                        <div className="flex-1 min-w-[180px] flex items-center gap-3 p-4 bg-darkish-grey rounded-xl border border-dark-border">
+                            <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-red-500/10">
+                                <TrendingUp className="w-5 h-5 text-red-400" />
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="text-slate text-xs">Total Spent</span>
+                                <span className="text-white font-bold text-xl">
+                                    ${totalSpent.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                                </span>
+                            </div>
+                        </div>
                     </div>
-                    <div className="flex flex-col">
-                        <span className="text-slate text-xs">Total Budget</span>
-                        <span className="text-white font-bold text-xl">
-                            ${totalBudget.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                        </span>
-                    </div>
-                </div>
-                <div className="flex-1 min-w-[180px] flex items-center gap-3 p-4 bg-darkish-grey rounded-xl border border-dark-border">
-                    <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-red-500/10">
-                        <TrendingUp className="w-5 h-5 text-red-400" />
-                    </div>
-                    <div className="flex flex-col">
-                        <span className="text-slate text-xs">Total Spent</span>
-                        <span className="text-white font-bold text-xl">
-                            ${totalSpent.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                        </span>
-                    </div>
-                </div>
-            </div>
 
-            {/* Category Cards */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-                {categories.map((cat) => (
-                    <CategoryCard
-                        key={cat.id}
-                        category={cat}
-                        onEdit={openEdit}
-                        onDelete={handleDelete}
-                        onToggle={handleToggle}
-                    />
-                ))}
-            </div>
+                    {/* Category Cards */}
+                    {categories.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-16 text-center">
+                            <Tag className="w-12 h-12 text-slate mb-3" />
+                            <h3 className="text-white font-bold text-lg mb-1">No categories yet</h3>
+                            <p className="text-slate text-sm">Create your first category to start tracking budgets.</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                            {categories.map((cat) => (
+                                <CategoryCard
+                                    key={cat.id}
+                                    category={cat}
+                                    onEdit={openEdit}
+                                    onDelete={handleDelete}
+                                    onToggle={handleToggle}
+                                />
+                            ))}
+                        </div>
+                    )}
+                </>
+            )}
         </>
     );
 };

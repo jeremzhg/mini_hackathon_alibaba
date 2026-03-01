@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Globe, Plus, Trash2, Cloud, Lock, Network } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Globe, Plus, Trash2, Cloud, Lock, Network, Loader2 } from "lucide-react";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import { Select } from "./ui/Select";
@@ -7,6 +7,7 @@ import { Badge } from "./ui/Badge";
 import { Toggle } from "./ui/Toggle";
 import { PageHeader } from "./ui/PageHeader";
 import { TablePagination } from "./ui/TablePagination";
+import { getCategories, updateCategoryDomains, type ApiCategory } from "../services/api";
 
 interface WhitelistDomain {
     id: string;
@@ -18,51 +19,65 @@ interface WhitelistDomain {
     subdomainsIncluded: boolean;
 }
 
-// ── Per-account seed data ───────────────────────────────────────────────
-
-const CATEGORIES = [
-    { id: "cloud-services", name: "Cloud Services" },
-    { id: "software-licenses", name: "Software Licenses" },
-    { id: "payment-fees", name: "Payment Fees" },
-];
-
-const INITIAL_DOMAINS: Record<string, WhitelistDomain[]> = {
-    "cloud-services": [
-        { id: "cs-1", domain: "aws.amazon.com", status: "Active", dateAdded: "Oct 24, 2023", icon: <Cloud className="w-4 h-4" />, httpsRequired: true, subdomainsIncluded: true },
-        { id: "cs-2", domain: "alibabacloud.com", status: "Active", dateAdded: "Oct 22, 2023", icon: <Cloud className="w-4 h-4" />, httpsRequired: true, subdomainsIncluded: true },
-        { id: "cs-3", domain: "console.cloud.google.com", status: "Active", dateAdded: "Oct 20, 2023", icon: <Cloud className="w-4 h-4" />, httpsRequired: true, subdomainsIncluded: false },
-        { id: "cs-4", domain: "portal.azure.com", status: "Verify", dateAdded: "Nov 05, 2023", icon: <Cloud className="w-4 h-4" />, httpsRequired: true, subdomainsIncluded: false },
-    ],
-    "software-licenses": [
-        { id: "sl-1", domain: "figma.com", status: "Active", dateAdded: "Nov 01, 2023", icon: <Globe className="w-4 h-4" />, httpsRequired: true, subdomainsIncluded: true },
-        { id: "sl-2", domain: "github.com", status: "Active", dateAdded: "Oct 28, 2023", icon: <Globe className="w-4 h-4" />, httpsRequired: true, subdomainsIncluded: true },
-        { id: "sl-3", domain: "workspace.google.com", status: "Active", dateAdded: "Oct 15, 2023", icon: <Globe className="w-4 h-4" />, httpsRequired: true, subdomainsIncluded: false },
-        { id: "sl-4", domain: "slack.com", status: "Verify", dateAdded: "Nov 10, 2023", icon: <Globe className="w-4 h-4" />, httpsRequired: false, subdomainsIncluded: false },
-    ],
-    "payment-fees": [
-        { id: "pf-1", domain: "stripe.com", status: "Active", dateAdded: "Sep 30, 2023", icon: <Globe className="w-4 h-4" />, httpsRequired: true, subdomainsIncluded: false },
-        { id: "pf-2", domain: "paylabs.co.id", status: "Active", dateAdded: "Oct 05, 2023", icon: <Globe className="w-4 h-4" />, httpsRequired: true, subdomainsIncluded: true },
-        { id: "pf-3", domain: "paypal.com", status: "Active", dateAdded: "Oct 10, 2023", icon: <Globe className="w-4 h-4" />, httpsRequired: true, subdomainsIncluded: true },
-    ],
-};
-
 // ── Component ───────────────────────────────────────────────────────────
 
 export const WhitelistManagementSection = () => {
     const [domainInput, setDomainInput] = useState("");
     const [currentPage, setCurrentPage] = useState(1);
-    const [activeAccount, setActiveAccount] = useState("cloud-services");
+    const [activeAccount, setActiveAccount] = useState("");
     const [httpsRequired, setHttpsRequired] = useState(true);
     const [subdomainsIncluded, setSubdomainsIncluded] = useState(true);
     const [validationError, setValidationError] = useState("");
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
     const itemsPerPage = 10;
 
-    const [domainsByAccount, setDomainsByAccount] = useState<Record<string, WhitelistDomain[]>>(INITIAL_DOMAINS);
+    // Data from API
+    const [apiCategories, setApiCategories] = useState<ApiCategory[]>([]);
+    const [domainsByAccount, setDomainsByAccount] = useState<Record<string, WhitelistDomain[]>>({});
+
+    const fetchCategories = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const cats = await getCategories();
+            setApiCategories(cats);
+
+            // Build domain map from API data
+            const domainMap: Record<string, WhitelistDomain[]> = {};
+            for (const cat of cats) {
+                domainMap[cat.name] = cat.domains.map((d, i) => ({
+                    id: `${cat.name}-${i}`,
+                    domain: d,
+                    status: "Active" as const,
+                    dateAdded: "—",
+                    icon: d.includes("cloud") || d.includes("aws") || d.includes("azure")
+                        ? <Cloud className="w-4 h-4" />
+                        : <Globe className="w-4 h-4" />,
+                    httpsRequired: true,
+                    subdomainsIncluded: false,
+                }));
+            }
+            setDomainsByAccount(domainMap);
+
+            // Set the first category as active if not already set
+            if (cats.length > 0 && !activeAccount) {
+                setActiveAccount(cats[0].name);
+            }
+        } catch (err) {
+            console.error("Failed to load categories:", err);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [activeAccount]);
+
+    useEffect(() => {
+        fetchCategories();
+    }, [fetchCategories]);
 
     const whitelistDomains = domainsByAccount[activeAccount] ?? [];
 
-    const handleAccountChange = (accountId: string) => {
-        setActiveAccount(accountId);
+    const handleAccountChange = (accountName: string) => {
+        setActiveAccount(accountName);
         setCurrentPage(1);
     };
 
@@ -81,7 +96,7 @@ export const WhitelistManagementSection = () => {
         return null;
     };
 
-    const handleAddToWhitelist = () => {
+    const handleAddToWhitelist = async () => {
         const domain = domainInput.trim().replace(/^https?:\/\//, "").replace(/\/+$/, "");
         const error = validateDomain(domainInput);
         if (error) {
@@ -98,24 +113,71 @@ export const WhitelistManagementSection = () => {
             httpsRequired,
             subdomainsIncluded,
         };
+
+        // Optimistic UI update
+        const newDomains = [...whitelistDomains, newDomain];
         setDomainsByAccount((prev) => ({
             ...prev,
-            [activeAccount]: [...(prev[activeAccount] ?? []), newDomain],
+            [activeAccount]: newDomains,
         }));
         setDomainInput("");
         setValidationError("");
+
+        // Persist to backend
+        setIsSaving(true);
+        try {
+            await updateCategoryDomains(activeAccount, newDomains.map((d) => d.domain));
+        } catch (err) {
+            console.error("Failed to update domains:", err);
+            // Revert on failure
+            setDomainsByAccount((prev) => ({
+                ...prev,
+                [activeAccount]: whitelistDomains,
+            }));
+        } finally {
+            setIsSaving(false);
+        }
     };
 
-    const handleRemoveDomain = (domainId: string) => {
+    const handleRemoveDomain = async (domainId: string) => {
+        const removedDomains = whitelistDomains.filter((d) => d.id !== domainId);
+
+        // Optimistic UI update
         setDomainsByAccount((prev) => ({
             ...prev,
-            [activeAccount]: (prev[activeAccount] ?? []).filter((d) => d.id !== domainId),
+            [activeAccount]: removedDomains,
         }));
+
+        // Persist to backend
+        try {
+            await updateCategoryDomains(activeAccount, removedDomains.map((d) => d.domain));
+        } catch (err) {
+            console.error("Failed to update domains:", err);
+            // Revert on failure
+            setDomainsByAccount((prev) => ({
+                ...prev,
+                [activeAccount]: whitelistDomains,
+            }));
+        }
     };
 
     const totalPages = Math.ceil(whitelistDomains.length / itemsPerPage);
     const startIndex = (currentPage - 1) * itemsPerPage;
     const paginatedDomains = whitelistDomains.slice(startIndex, startIndex + itemsPerPage);
+
+    if (isLoading) {
+        return (
+            <>
+                <PageHeader
+                    title="Whitelist Management"
+                    subtitle="Define trusted domains for each spending category."
+                />
+                <div className="flex items-center justify-center py-20">
+                    <Loader2 className="w-8 h-8 text-blue animate-spin" />
+                </div>
+            </>
+        );
+    }
 
     return (
         <>
@@ -133,13 +195,17 @@ export const WhitelistManagementSection = () => {
                             <label htmlFor="category-select" className="font-medium text-white text-sm">
                                 Active Category
                             </label>
-                            <Select id="category-select" value={activeAccount} onChange={(e) => handleAccountChange(e.target.value)}>
-                                {CATEGORIES.map((cat) => (
-                                    <option key={cat.id} value={cat.id}>
-                                        {cat.name}
-                                    </option>
-                                ))}
-                            </Select>
+                            {apiCategories.length === 0 ? (
+                                <p className="text-slate text-sm">No categories found. Create a category first.</p>
+                            ) : (
+                                <Select id="category-select" value={activeAccount} onChange={(e) => handleAccountChange(e.target.value)}>
+                                    {apiCategories.map((cat) => (
+                                        <option key={cat.id} value={cat.name}>
+                                            {cat.name}
+                                        </option>
+                                    ))}
+                                </Select>
+                            )}
                             <p className="text-slate text-xs mt-1">Select a spending category to manage its whitelisted domains.</p>
                         </div>
                     </div>
@@ -168,8 +234,12 @@ export const WhitelistManagementSection = () => {
                                     icon={<Globe className="w-5 h-5 text-slate" />}
                                     wrapperClassName="flex-1"
                                 />
-                                <Button onClick={handleAddToWhitelist} className="whitespace-nowrap">
-                                    <Plus className="w-5 h-5 mr-2" />
+                                <Button onClick={handleAddToWhitelist} className="whitespace-nowrap" disabled={isSaving}>
+                                    {isSaving ? (
+                                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                                    ) : (
+                                        <Plus className="w-5 h-5 mr-2" />
+                                    )}
                                     Add to Whitelist
                                 </Button>
                             </div>
@@ -267,6 +337,13 @@ export const WhitelistManagementSection = () => {
                                             </td>
                                         </tr>
                                     ))}
+                                    {whitelistDomains.length === 0 && (
+                                        <tr>
+                                            <td colSpan={5} className="px-6 py-12 text-center text-slate text-sm">
+                                                No whitelisted domains for this category.
+                                            </td>
+                                        </tr>
+                                    )}
                                 </tbody>
                             </table>
                         </div>

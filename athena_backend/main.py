@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
 import re
@@ -11,6 +12,14 @@ from models import Category, Domain, History
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="AI Security Interceptor")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Pydantic models for the incoming request
 class InterceptRequest(BaseModel):
@@ -64,6 +73,20 @@ class InterceptResponse(BaseModel):
     whitelist_verification: WhitelistVerification
     limit_verification: LimitVerification
     security_summary: str
+
+@app.get("/api/v1/categories")
+def list_categories(db: Session = Depends(get_db)):
+    categories = db.query(Category).all()
+    return [
+        {
+            "id": cat.id,
+            "name": cat.name,
+            "initial_limit": cat.initial_limit,
+            "remaining_budget": cat.remaining_budget,
+            "domains": [d.name for d in cat.domains],
+        }
+        for cat in categories
+    ]
 
 @app.post("/api/v1/categories")
 def create_category(request: CategoryCreateRequest, db: Session = Depends(get_db)):
